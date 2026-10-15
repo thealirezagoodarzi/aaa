@@ -174,6 +174,33 @@ function extractAuthUser(req: IncomingMessage): TokenPayload | null {
 //      authenticated but insufficient role -> 403 FORBIDDEN_ROLE.
 // The client distinguishes the two via the code field, so proactive/retry
 // refresh stays safe even when a legitimately-forbidden user hits these gates.
+function requireRole(
+  req: IncomingMessage,
+  res: ServerResponse,
+  authUser: TokenPayload | null,
+  allowedRoles: string | string[],
+  forbiddenError: string
+): boolean {
+  if (!authUser) {
+    res.statusCode = 401;
+    res.setHeader('X-Error-Code', 'UNAUTHENTICATED');
+    res.end(JSON.stringify({
+      success: false,
+      code: 'UNAUTHENTICATED',
+      error: 'نشست شما منقضی یا نامعتبر است. در حال نوسازی…'
+    }));
+    return true;
+  }
+  const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
+  if (!roles.includes(authUser.role)) {
+    res.statusCode = 403;
+    res.setHeader('X-Error-Code', 'FORBIDDEN_ROLE');
+    res.end(JSON.stringify({ success: false, code: 'FORBIDDEN_ROLE', error: forbiddenError }));
+    return true;
+  }
+  return false;
+}
+
 function respondRoleGate(
   req: IncomingMessage,
   res: ServerResponse,
@@ -450,7 +477,7 @@ export async function handleLabDataApi(
     // 4b. GET /api/lab-data/backups -> List automatic DB backups (Admin only)
     if (req.method === 'GET' && url === '/api/lab-data/backups') {
       const authUser = extractAuthUser(req);
-      if (respondRoleGate(req, res, authUser, 'دسترسی غیرمجاز: مشاهده لیست پشتیبان‌ها فقط توسط مدیر ارشد مجاز است.')) return;
+      if (requireRole(req, res, authUser, ['admin'], 'دسترسی غیرمجاز: مشاهده لیست پشتیبان‌ها فقط توسط مدیر ارشد مجاز است.')) return;
       try {
         // listBackups is async (fs.promises) — must be awaited.
         const backups = await listBackups();
@@ -533,7 +560,7 @@ export async function handleLabDataApi(
     if (url === '/api/lab-data/restore-backup') {
       const body = await readJsonBody(req); // own read: shared `payload` is in TDZ here
       const authUser = extractAuthUser(req);
-      if (respondRoleGate(req, res, authUser, 'دسترسی غیرمجاز: بازگردانی پشتیبان خودکار فقط توسط مدیر ارشد مجاز است.')) return;
+      if (requireRole(req, res, authUser, ['admin'], 'دسترسی غیرمجاز: بازگردانی پشتیبان خودکار فقط توسط مدیر ارشد مجاز است.')) return;
       const fileName = typeof body.file === 'string' ? body.file : '';
       const ok = await withDbWrite(() => restoreNamedBackup(fileName));
       const state = getDatabaseState();
@@ -551,7 +578,7 @@ export async function handleLabDataApi(
     // 5. GET /api/lab-data/export -> Download raw database JSON backup (Admin only)
     if (req.method === 'GET' && url === '/api/lab-data/export') {
       const authUser = extractAuthUser(req);
-      if (respondRoleGate(req, res, authUser, 'دسترسی غیرمجاز: دانلود نسخه پشتیبان فقط توسط مدیر ارشد سامانه مجاز است.')) return;
+      if (requireRole(req, res, authUser, ['admin'], 'دسترسی غیرمجاز: دانلود نسخه پشتیبان فقط توسط مدیر ارشد سامانه مجاز است.')) return;
       const state = getDatabaseState();
       res.setHeader('Content-Disposition', `attachment; filename="laboratory_db_backup_${Date.now()}.json"`);
       res.statusCode = 200;
@@ -773,7 +800,7 @@ export async function handleLabDataApi(
     // through withDbWrite() so concurrent requests can no longer clobber each
     // other's records. Handlers await the result and then re-read the state.
     if (url === '/api/lab-data/sync') {
-      if (respondRoleGate(req, res, authUser, 'دسترسی غیرمجاز: همگام‌سازی کامل پایگاه داده منحصراً توسط مدیر ارشد (Admin) مجاز است.')) return;
+      if (requireRole(req, res, authUser, ['admin'], 'دسترسی غیرمجاز: همگام‌سازی کامل پایگاه داده منحصراً توسط مدیر ارشد (Admin) مجاز است.')) return;
       const incomingData = payload.data || payload;
       const updatedState = await withDbWrite(() => syncFullDatabase(incomingData));
       res.statusCode = 200;
@@ -788,7 +815,7 @@ export async function handleLabDataApi(
 
     // 10. POST /api/lab-data/reset -> Reset database to initial factory defaults (Admin only)
     if (url === '/api/lab-data/reset') {
-      if (respondRoleGate(req, res, authUser, 'دسترسی غیرمجاز: بازنشانی سیستم به حالت اولیه فقط توسط مدیر ارشد سامانه مجاز است.')) return;
+      if (requireRole(req, res, authUser, ['admin'], 'دسترسی غیرمجاز: بازنشانی سیستم به حالت اولیه فقط توسط مدیر ارشد سامانه مجاز است.')) return;
       const state = await withDbWrite(() => resetDatabaseToDefaults());
       res.statusCode = 200;
       res.end(JSON.stringify({
@@ -802,7 +829,7 @@ export async function handleLabDataApi(
 
     // 11. POST /api/lab-data/restore -> Restore whole database from uploaded JSON (Admin only)
     if (url === '/api/lab-data/restore') {
-      if (respondRoleGate(req, res, authUser, 'دسترسی غیرمجاز: بازیابی فایل پشتیبان پایگاه داده فقط برای مدیر ارشد مجاز است.')) return;
+      if (requireRole(req, res, authUser, ['admin'], 'دسترسی غیرمجاز: بازیابی فایل پشتیبان پایگاه داده فقط برای مدیر ارشد مجاز است.')) return;
       const incoming = payload.data || payload;
       const ok = await withDbWrite(() => restoreFromBackup(incoming));
       const state = getDatabaseState();
@@ -818,7 +845,7 @@ export async function handleLabDataApi(
 
     // 12. POST /api/lab-data/update-role -> Update user role (Admin only)
     if (url === '/api/lab-data/update-role') {
-      if (respondRoleGate(req, res, authUser, 'دسترسی غیرمجاز: تغییر دسترسی و نقش کاربران فقط توسط مدیر ارشد سامانه مجاز است.')) return;
+      if (requireRole(req, res, authUser, ['admin'], 'دسترسی غیرمجاز: تغییر دسترسی و نقش کاربران فقط توسط مدیر ارشد سامانه مجاز است.')) return;
       const { userId, role } = payload;
       if (!userId || !role) {
         res.statusCode = 400;
@@ -844,7 +871,7 @@ export async function handleLabDataApi(
     // a single-record removal inside the serialized write chain and revokes
     // the deleted user's live sessions server-side.
     if (url === '/api/lab-data/delete-profile') {
-      if (respondRoleGate(req, res, authUser, 'دسترسی غیرمجاز: حذف کاربران فقط توسط مدیر ارشد سامانه مجاز است.')) return;
+      if (requireRole(req, res, authUser, ['admin'], 'دسترسی غیرمجاز: حذف کاربران فقط توسط مدیر ارشد سامانه مجاز است.')) return;
       const { profileId } = payload;
       const result = await withDbWrite(() => deleteProfileServer(String(profileId || '')));
       const state = getDatabaseState();
@@ -883,7 +910,7 @@ export async function handleLabDataApi(
         return;
       } else {
         // Operational collections require Admin or Operator
-        if (respondRoleGate(req, res, authUser, 'دسترسی ویرایش فقط برای تکنسین‌ها یا مدیر مجاز است.')) return;
+        if (requireRole(req, res, authUser, ['admin', 'operator'], 'دسترسی ویرایش فقط برای تکنسین‌ها یا مدیر مجاز است.')) return;
       }
 
       const result = await withDbWrite(() => syncCollection(collection, data, typeof baseVersion === 'number' ? baseVersion : undefined));
@@ -931,7 +958,11 @@ export async function handleLabDataApi(
       }
 
       // Allowed if user changes their own password OR is admin
-      if (respondRoleGate(req, res, authUser, 'دسترسی غیرمجاز برای تغییر رمز عبور.')) return;
+      const isSelf = authUser && (authUser.userId === userId || authUser.username === userId);
+      const isAdmin = authUser && authUser.role === 'admin';
+      if (!isSelf && !isAdmin) {
+        if (respondRoleGate(req, res, authUser, 'دسترسی غیرمجاز برای تغییر رمز عبور.')) return;
+      }
 
       // SECURITY FIX #5: a SELF-service change must prove knowledge of the
       // current credential. Previously any authenticated session could replace
@@ -1033,7 +1064,7 @@ export async function handleLabDataApi(
 
     // 16. POST /api/lab-data/update-dispatch-status (Admin or Operator)
     if (url === '/api/lab-data/update-dispatch-status') {
-      if (respondRoleGate(req, res, authUser, 'دسترسی غیرمجاز.')) return;
+      if (requireRole(req, res, authUser, ['admin', 'operator'], 'دسترسی غیرمجاز.')) return;
       const { id, status, technicianName } = payload;
       if (!id || !status) {
         res.statusCode = 400;
@@ -1053,7 +1084,7 @@ export async function handleLabDataApi(
 
     // 17. POST /api/lab-data/add-customer (Admin or Operator)
     if (url === '/api/lab-data/add-customer') {
-      if (respondRoleGate(req, res, authUser, 'ثبت کارفرمای جدید فقط توسط پرسنل آزمایشگاه مجاز است.')) return;
+      if (requireRole(req, res, authUser, ['admin', 'operator'], 'ثبت کارفرمای جدید فقط توسط پرسنل آزمایشگاه مجاز است.')) return;
       const { customer } = payload;
       if (!customer) {
         res.statusCode = 400;
@@ -1084,7 +1115,7 @@ export async function handleLabDataApi(
 
     // 18. POST /api/lab-data/add-profile (Admin or Operator)
     if (url === '/api/lab-data/add-profile') {
-      if (respondRoleGate(req, res, authUser, 'دسترسی غیرمجاز.')) return;
+      if (requireRole(req, res, authUser, ['admin', 'operator'], 'دسترسی غیرمجاز: تعریف کاربر جدید منحصراً توسط پرسنل مجاز آزمایشگاه امکان‌پذیر است.')) return;
       const { profile, initialPassword } = payload;
       if (!profile) {
         res.statusCode = 400;
@@ -1098,7 +1129,18 @@ export async function handleLabDataApi(
       if (typeof initialPassword === 'string' && initialPassword.trim()) {
         profile.password = initialPassword.trim();
       }
-      const saved = await withDbWrite(() => addProfileServer(profile));
+      let saved: any;
+      try {
+        saved = await withDbWrite(() => addProfileServer(profile));
+      } catch (err: any) {
+        const statusCode = typeof err?.statusCode === 'number' ? err.statusCode : 400;
+        res.statusCode = statusCode;
+        res.end(JSON.stringify({
+          success: false,
+          error: err?.message || 'خطا در ثبت کاربر جدید در سرور.'
+        }));
+        return;
+      }
       const state = getDatabaseState();
       res.statusCode = 200;
       res.end(JSON.stringify({
@@ -1165,7 +1207,7 @@ export async function handleLabDataApi(
 
     // 20. POST /api/lab-data/register-customer-account (Admin or Operator)
     if (url === '/api/lab-data/register-customer-account') {
-      if (respondRoleGate(req, res, authUser, 'دسترسی غیرمجاز.')) return;
+      if (requireRole(req, res, authUser, ['admin', 'operator'], 'دسترسی غیرمجاز.')) return;
       const { customer, user, payment } = payload;
       if (!customer || !user) {
         res.statusCode = 400;

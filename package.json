@@ -16,7 +16,8 @@
     "typecheck:server": "tsc --noEmit -p tsconfig.server.json",
     "format": "prettier --write \"src/**/*.{ts,tsx}\" \"server/**/*.ts\" \"shared/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"server/**/*.ts\" \"shared/**/*.ts\"",
-    "test:credentials": "npm run build && node tests/credential-repair.test.cjs"
+    "test:credentials": "npm run build && node tests/credential-repair.test.cjs",
+    "test": "node tests/credential-repair.test.cjs && node tests/navigation-session.test.cjs && node tests/operator-auth.test.cjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

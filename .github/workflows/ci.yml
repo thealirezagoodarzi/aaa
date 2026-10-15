@@ -57,8 +57,8 @@ jobs:
         run: npm run build
 
       # Exercises dist/server.cjs in library mode against temp DB roots.
-      - name: Credential-repair tests
-        run: node tests/credential-repair.test.cjs
+      - name: Run test suite
+        run: npm test
 
   nginx-config-syntax:
     # AUDIT FIX (#85): gate the deploy config with `nginx -t` so commented-out

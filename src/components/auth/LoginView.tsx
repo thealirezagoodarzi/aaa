@@ -213,7 +213,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
     setIsLoading(true);
 
     try {
-      const loginResult = await labDb.login(identifierInput, passwordInput);
+      const loginResult = await labDb.login(identifierInput.trim(), passwordInput.trim());
 
       if (!loginResult.success) {
         setIsLoading(false);

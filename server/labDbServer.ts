@@ -2533,7 +2533,11 @@ function buildProfileIndex(profiles: any[]): ProfileIndexMaps {
   return maps;
 }
 
-function getProfileIndex(state: LabDatabaseState): ProfileIndexMaps {
+export function invalidateProfileIndex(): void {
+  profileIndexCache = null;
+}
+
+export function getProfileIndex(state: LabDatabaseState): ProfileIndexMaps {
   const profiles = state.profiles || [];
   if (!profileIndexCache || profileIndexCache.stateRef !== state || profileIndexCache.profilesRef !== profiles) {
     profileIndexCache = { stateRef: state, profilesRef: profiles, maps: buildProfileIndex(profiles) };
@@ -2645,6 +2649,7 @@ function prepareStateForSave(state: LabDatabaseState, changedCollections?: strin
   const isSelfSave = state === cachedState;
   const existingProfiles = !isSelfSave && Array.isArray(cachedState?.profiles) ? cachedState!.profiles : undefined;
   state.profiles = enforceSoleAdminRules(state.profiles, existingProfiles);
+  invalidateProfileIndex();
   // Ensure technicians collection always exists (server-side persistence for field technicians)
   if (!Array.isArray((state as any).technicians)) (state as any).technicians = [];
   state.lastUpdated = Date.now();
@@ -3196,28 +3201,28 @@ export function addProfileServer(profile: any): any {
     throw err;
   }
 
+  // Normalize digits so Persian numerals in passwords or usernames convert reliably
+  const normalizedPwd = toEnglishDigits(rawIncomingPwd);
+
   try {
-    profile.password = hashPassword(rawIncomingPwd);
+    profile.password = hashPassword(normalizedPwd);
   } catch (e: any) {
     const err: any = new Error(e?.message || 'INVALID_PASSWORD: رمز عبور کاربر جدید نامعتبر است.');
     err.statusCode = 400;
     throw err;
   }
 
-  // BUG FIX (problem #2 — "a newly created operator vanishes after one
-  // login/logout cycle"): profiles whose credential matched the well-known
-  // legacy default were stored with mustChangePassword=true and every one of
-  // their writes was gated server-side (HTTP 403 PASSWORD_CHANGE_REQUIRED).
-  // The admin dashboard had no UI to change ANOTHER user's password while the
-  // admin itself was flagged, so the freshly-created account was silently
-  // dropped from local state on the next reload/sync — it looked like the
-  // operator "disappeared". New accounts now get the server-managed
-  // forced-change flag ONLY when they still carry the public legacy
-  // credential; genuine user-chosen passwords are immediately usable and the
-  // record survives login/logout and full-sync cycles intact.
   profile.mustChangePassword = storedHashIsLegacyDefault(profile.password);
 
-  const idx = current.profiles.findIndex(p => p.id === profile.id || (p.username && profile.username && p.username === profile.username));
+  // Normalize username and phone
+  if (profile.username) {
+    profile.username = toEnglishDigits(String(profile.username).trim());
+  }
+  if (profile.phone) {
+    profile.phone = toEnglishDigits(String(profile.phone).trim());
+  }
+
+  const idx = current.profiles.findIndex(p => p.id === profile.id || (p.username && profile.username && toEnglishDigits(p.username).toLowerCase() === toEnglishDigits(profile.username).toLowerCase()));
   if (idx >= 0) {
     // Security fix: never downgrade an existing scrypt hash with a plaintext
     // value arriving from stale client state — only hashed credentials may
@@ -3232,6 +3237,9 @@ export function addProfileServer(profile: any): any {
   } else {
     current.profiles.unshift(profile);
   }
+
+  current.profiles = [...current.profiles];
+  invalidateProfileIndex();
 
   saveStateToDisk(current, 'profiles');
   return profile;
@@ -3701,7 +3709,7 @@ export function findUserByIdentifier(identifier: string): any | null {
   // the original ambiguity semantics exactly (two accounts sharing one
   // identifier → refuse to pick silently), we verify uniqueness with one
   // counting pass ONLY in the rare case a fast-path key actually hits.
-  const idx = getProfileIndex(current);
+  let idx = getProfileIndex(current);
   let candidate: any | undefined =
     idx.byUsername.get(eng) ||
     idx.byEmail.get(eng) ||
@@ -3712,11 +3720,47 @@ export function findUserByIdentifier(identifier: string): any | null {
     // Full phone match only (normalized digits) — never suffix fragments.
     candidate = idx.byPhone.get(digitsOnly);
   }
+
+  // Defensive fallback: if candidate not found in cached index, invalidate cache and re-check
+  if (!candidate) {
+    invalidateProfileIndex();
+    idx = getProfileIndex(current);
+    candidate =
+      idx.byUsername.get(eng) ||
+      idx.byEmail.get(eng) ||
+      idx.byCustomerId.get(eng) ||
+      idx.byCustomerId.get(`cust-${eng}`) ||
+      idx.byId.get(eng);
+    if (!candidate && digitsOnly.length >= 8) {
+      candidate = idx.byPhone.get(digitsOnly);
+    }
+  }
+
+  // Linear scan fallback over current.profiles to prevent any desync
+  if (!candidate && Array.isArray(current.profiles)) {
+    candidate = current.profiles.find((u: any) => {
+      const uEmail = (u.email || '').toLowerCase();
+      const uUsername = toEnglishDigits(u.username || '').toLowerCase();
+      const uPhone = toEnglishDigits(u.phone || '').replace(/[^0-9]/g, '');
+      const uCustId = toEnglishDigits(u.customerId || '').toLowerCase();
+      const uId = toEnglishDigits(String(u.id || '')).toLowerCase();
+
+      return (
+        uUsername === eng ||
+        uEmail === eng ||
+        uId === eng ||
+        uCustId === eng ||
+        `cust-${eng}` === uCustId ||
+        (digitsOnly.length >= 8 && uPhone && (uPhone === digitsOnly || uPhone.endsWith(digitsOnly) || digitsOnly.endsWith(uPhone)))
+      );
+    });
+  }
+
   if (!candidate) return null;
 
   // A hit exists → confirm no OTHER profile matches the same strict criteria.
   let matches = 0;
-  for (const u of current.profiles) {
+  for (const u of current.profiles || []) {
     const uEmail = (u.email || '').toLowerCase();
     const uUsername = toEnglishDigits(u.username || '').toLowerCase();
     const uPhone = toEnglishDigits(u.phone || '').replace(/[^0-9]/g, '');
@@ -3754,7 +3798,8 @@ export async function authenticateUser(identifier: string, password: string): Pr
 
   const isValid = verifyPassword(enteredPassword, user.password) ||
                   verifyPassword(enteredNorm, user.password) ||
-                  verifyPassword(enteredPassword.toLowerCase(), user.password);
+                  verifyPassword(enteredPassword.toLowerCase(), user.password) ||
+                  verifyPassword(enteredNorm.toLowerCase(), user.password);
 
   if (!isValid) {
     return { success: false, error: 'رمز عبور وارد شده صحیح نمی‌باشد.' };
