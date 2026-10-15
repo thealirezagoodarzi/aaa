@@ -1,0 +1,10 @@
+dist/
+data/.server_salts.json
+data/.session_secret
+data/active_sessions.json
+data/
+.env
+.env.*
+!.env.example
+logs/
+*.log

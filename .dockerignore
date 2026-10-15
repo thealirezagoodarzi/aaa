@@ -1,0 +1,17 @@
+# Keep the build context small and reproducible (audit #87).
+.git
+.github
+node_modules
+dist
+data
+logs
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+AUDIT_PROMPT*.md
+deploy
+ecosystem.config.cjs
+smoke_test.cjs
+tests

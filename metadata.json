@@ -1,0 +1,9 @@
+{
+  "name": "آزما بتن پایش خاک و پی جهان بین",
+  "description": "سامانه جامع مدیریت و کنترل کیفیت آزمایشگاه تخصصی مقاومت مصالح، بتن و ژئوتکنیک آزما بتن پایش خاک و پی جهان بین، نتایج آزمونهای مقاومت فشاری، شیتهای رسمی آزمایشگاهی با QR کد و پرتال مشتریان.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ],
+  "_comment": "AUDIT FIX (#99): product-neutral metadata only. The AI-Studio platform coupling fields (\"id\": \"concrete_lab_v36\", versioned internal names) were removed — release identifiers must not live in the production repo; they belong to the CI/CD metadata of the hosting platform."
+}
