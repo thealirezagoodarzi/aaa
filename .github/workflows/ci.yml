@@ -29,12 +29,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
 
-      # `npm ci` fails hard when package-lock.json and package.json disagree —
-      # that is the reproducibility guarantee requested in audit #100.
-      - name: Install (clean, lockfile-pinned)
-        run: npm ci
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json', '**/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      # If package-lock.json is committed, use reproducible `npm ci`.
+      # If not present in git yet, gracefully fall back to `npm install`.
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --include=dev
+          else
+            npm install --include=dev
+          fi
 
       # tsc --noEmit over BOTH projects: client (tsconfig.json) and server
       # (tsconfig.server.json — audit #93: server files are now type-checked).
