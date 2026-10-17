@@ -44,7 +44,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setIsLoading(true);
 
     try {
-      const result = await labDb.login(identifierInput, passwordInput);
+      const result = await labDb.login(identifierInput.trim(), passwordInput.trim());
       setIsLoading(false);
 
       if (!result.success) {

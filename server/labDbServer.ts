@@ -1610,6 +1610,8 @@ export function enforceSoleAdminRules(profiles: any[], existingProfiles?: any[])
                  (p.username ? credentialMap.get(String(p.username)) : undefined) ??
                  (p.email ? credentialMap.get(String(p.email)) : undefined);
       if (ex) return ex;                                    // keep stored credential
+      // Genuine server-format hash written by addProfileServer / internal mutators must win
+      if (isGenuineServerScryptHash(inc)) return inc;
       // No stored credential to carry over: drop the bogus client value so
       // normalizeStoredPassword() keeps the profile passwordless instead
       // of persisting an unverifiable fake hash.
@@ -1685,6 +1687,8 @@ export function enforceSoleAdminRules(profiles: any[], existingProfiles?: any[])
         p.password = normalizeStoredPassword(resolved, true);
       } else if (resolved === '' && hasNoUsableStoredCredential(incomingPwdRaw)) {
         p.password = normalizeStoredPassword('');
+      } else if (resolved === '' && isGenuineServerScryptHash(incomingPwdRaw)) {
+        p.password = incomingPwdRaw;
       }
     }
   }
@@ -2520,13 +2524,24 @@ function buildProfileIndex(profiles: any[]): ProfileIndexMaps {
   };
   for (const p of profiles || []) {
     if (!p) continue;
-    if (p.id != null) maps.byId.set(String(p.id), p);
+    if (p.id != null) {
+      maps.byId.set(String(p.id), p);
+      maps.byId.set(String(p.id).toLowerCase(), p);
+    }
     const uname = toEnglishDigits(String(p.username || '')).toLowerCase();
     if (uname) maps.byUsername.set(uname, p);
     const email = String(p.email || '').toLowerCase();
     if (email) maps.byEmail.set(email, p);
     const phone = toEnglishDigits(String(p.phone || '')).replace(/[^0-9]/g, '');
-    if (phone) maps.byPhone.set(phone, p);
+    if (phone) {
+      maps.byPhone.set(phone, p);
+      if (phone.startsWith('09') && phone.length === 11) {
+        maps.byPhone.set(phone.slice(1), p); // 913...
+      } else if (phone.startsWith('98') && phone.length === 12) {
+        maps.byPhone.set('0' + phone.slice(2), p);
+        maps.byPhone.set(phone.slice(2), p);
+      }
+    }
     const cid = toEnglishDigits(String(p.customerId || '')).toLowerCase();
     if (cid) maps.byCustomerId.set(cid, p);
   }
@@ -3769,7 +3784,7 @@ export function findUserByIdentifier(identifier: string): any | null {
 
     if (uUsername === eng || uEmail === eng || uId === eng ||
         uCustId === eng || `cust-${eng}` === uCustId ||
-        (digitsOnly.length >= 8 && uPhone && uPhone === digitsOnly)) {
+        (digitsOnly.length >= 8 && uPhone && (uPhone === digitsOnly || uPhone.endsWith(digitsOnly) || digitsOnly.endsWith(uPhone)))) {
       matches++;
       if (matches > 1) return null; // ambiguous → refuse
     }

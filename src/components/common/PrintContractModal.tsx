@@ -171,16 +171,12 @@ export const PrintContractModal: React.FC<PrintContractModalProps> = ({
       } else if (result?.status === 'SUCCESS') {
         setNotification('فایل PDF رسمی قرارداد با موفقیت تولید و دانلود شد.');
       } else {
-        // Generator could not render the PDF (missing element / timeout / error):
-        // open exactly ONE controlled print dialog as a graceful fallback.
-        if (!printOnlyElement('contract-printable-doc')) window.print();
-        setNotification(result?.error || 'پنجره چاپ و ذخیره PDF باز شد. می‌توانید گزینه Save as PDF را در بخش پرینتر انتخاب فرمایید.');
+        setNotification(result?.error || 'خطا در ایجاد فایل PDF. لطفاً مجدداً تلاش نمایید.');
       }
       setTimeout(() => setNotification(null), 5000);
-    } catch (e) {
+    } catch (e: any) {
       console.error('PDF download error:', e);
-      if (!printOnlyElement('contract-printable-doc')) window.print();
-      setNotification('پنجره چاپ و ذخیره PDF باز شد.');
+      setNotification('خطا در تولید فایل PDF. لطفاً مجدداً تلاش نمایید.');
       setTimeout(() => setNotification(null), 4000);
     } finally {
       setIsGeneratingPdf(false);
