@@ -55,7 +55,7 @@ export async function downloadContractPdf(
       import('html2canvas'),
       import('jspdf')
     ]);
-    const html2canvas = html2canvasModule.default || html2canvasModule;
+    const html2canvas: any = (html2canvasModule as any).default || html2canvasModule;
     const { jsPDF } = jspdfModule;
 
     const pdf = new jsPDF({

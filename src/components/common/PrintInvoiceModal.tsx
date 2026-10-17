@@ -61,8 +61,8 @@ export const PrintInvoiceModal: React.FC<PrintInvoiceModalProps> = ({
     setIsExportingPdf(true);
     try {
       const { downloadContractPdf } = await import('../../utils/contractPdfGenerator');
-      const ok = await downloadContractPdf('invoice-print-area', `Factor-${invoice.invoiceNo || 'lab'}`);
-      if (!ok) {
+      const res = await downloadContractPdf('invoice-print-area', `Factor-${invoice.invoiceNo || 'lab'}`);
+      if (!res || !res.success) {
         // Generator could not produce the PDF (missing element / timeout):
         // open exactly ONE controlled print dialog as a graceful fallback.
         printInvoice();

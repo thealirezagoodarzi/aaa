@@ -64,6 +64,12 @@ async function runTests() {
   assert.strictEqual(authResult.user.id, testOpId, '❌ FAIL: authenticated user ID mismatch');
   console.log('✅ PASS: Operator successfully logged in with username and password.');
 
+  // 2b. Authentication using User ID (کد کاربری usr-tech-...)
+  const authById = await labDb.authenticateUser(testOpId, testOpPassword);
+  assert(authById.success, `❌ FAIL: authenticateUser with user ID failed: ${authById.error}`);
+  assert.strictEqual(authById.user.id, testOpId, '❌ FAIL: authenticated user ID mismatch');
+  console.log('✅ PASS: Operator successfully logged in with User ID (کد کاربری).');
+
   // 3. Persian digits support in login identifier and password
   const persianUsername = testOpUsername.replace(/\d/g, d => String.fromCharCode(d.charCodeAt(0) + 1728));
   const persianPassword = testOpPassword.replace(/\d/g, d => String.fromCharCode(d.charCodeAt(0) + 1728));
