@@ -71,6 +71,7 @@ export const AdminSmsManagementTab: React.FC<AdminSmsManagementTabProps> = ({ cu
   const [selectedEventType, setSelectedEventType] = useState<SmsEvent>('custom');
   const [smsMessage, setSmsMessage] = useState('');
   const [sendSuccessToast, setSendSuccessToast] = useState<string | null>(null);
+  const [sendErrorMsg, setSendErrorMsg] = useState<string | null>(null);
 
   const refreshData = () => {
     setSmsLogs(labDb.getSmsLogs());
@@ -141,9 +142,10 @@ export const AdminSmsManagementTab: React.FC<AdminSmsManagementTabProps> = ({ cu
   const handleSendSmsSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customPhone.trim() || !smsMessage.trim()) {
-      alert('شماره تلفن گیرنده و متن پیامک الزامی است.');
+      setSendErrorMsg('شماره تلفن گیرنده و متن پیامک الزامی است.');
       return;
     }
+    setSendErrorMsg(null);
 
     const c = customers.find(x => x.id === selectedCustomerId);
 
@@ -390,6 +392,12 @@ export const AdminSmsManagementTab: React.FC<AdminSmsManagementTabProps> = ({ cu
             </div>
 
             <form onSubmit={handleSendSmsSubmit} className="space-y-4 text-xs">
+              {sendErrorMsg && (
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{sendErrorMsg}</span>
+                </div>
+              )}
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">

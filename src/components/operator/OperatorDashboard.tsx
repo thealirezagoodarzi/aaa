@@ -49,6 +49,7 @@ import { OperatorSettingsTab } from './OperatorSettingsTab';
 import { OperatorResultModal } from './OperatorResultModal';
 import { OperatorSamplesView } from './OperatorSamplesView';
 import { OperatorCustomersList } from './OperatorCustomersList';
+import { OperatorRequestsTab } from './OperatorRequestsTab';
 import { PhotoGalleryViewer } from '../common/PhotoGalleryViewer';
 import { PrintCertificate } from '../common/PrintCertificate';
 import { CompanyLogo } from '../common/CompanyLogo';
@@ -80,7 +81,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
   onToggleDarkMode
 }) => {
   const t = translations[language];
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'new_test' | 'samples' | 'tests' | 'customers' | 'reports' | 'gallery' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'requests' | 'new_test' | 'samples' | 'tests' | 'customers' | 'reports' | 'gallery' | 'settings'>('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -261,6 +262,21 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
           >
             <LayoutDashboard className="w-4 h-4 shrink-0" />
             <span>پیشخوان و آمار سریع</span>
+          </button>
+
+          <button 
+            onClick={() => { setActiveTab('requests'); setMobileMenuOpen(false); }}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition ${activeTab === 'requests' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'}`}
+          >
+            <div className="flex items-center gap-3">
+              <Truck className="w-4 h-4 shrink-0" />
+              <span>درخواست‌های اعزام و آنلاین</span>
+            </div>
+            {webRequests.length > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold bg-rose-500 text-white animate-pulse">
+                {toPersianDigits(webRequests.length)}
+              </span>
+            )}
           </button>
 
           <button 
@@ -901,6 +917,10 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
               </div>
 
             </div>
+          )}
+
+          {activeTab === 'requests' && (
+            <OperatorRequestsTab currentUser={currentUser} />
           )}
 
           {activeTab === 'new_test' && (

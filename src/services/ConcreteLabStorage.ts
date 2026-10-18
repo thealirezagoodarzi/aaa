@@ -1104,7 +1104,6 @@ export class ConcreteLabStorage {
       setTimeout(() => URL.revokeObjectURL(url), 2000);
     } catch (err) {
       console.error('Export backup failed:', err);
-      alert((err as Error)?.message || 'دانلود نسخه پشتیبان ناموفق بود.');
       throw err;
     }
   }

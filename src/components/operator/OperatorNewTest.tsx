@@ -62,6 +62,7 @@ export const OperatorNewTest: React.FC<OperatorNewTestProps> = ({
   const [samplingTime, setSamplingTime] = useState('۱۰:۳۰');
   const [selectedPhoto, setSelectedPhoto] = useState<string>(LAB_IMAGES.cubesBench);
   const [uploadedPhotoUrl, setUploadedPhotoUrl] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdReportNo, setCreatedReportNo] = useState<string | null>(null);
 
@@ -95,7 +96,8 @@ export const OperatorNewTest: React.FC<OperatorNewTestProps> = ({
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      alert('لطفاً یک فایل تصویری معتبر انتخاب فرمایید.');
+      setUploadError('لطفاً یک فایل تصویری معتبر انتخاب فرمایید.');
+      setTimeout(() => setUploadError(null), 4000);
       return;
     }
 
@@ -579,6 +581,12 @@ export const OperatorNewTest: React.FC<OperatorNewTestProps> = ({
                 </select>
               )}
             </div>
+            {uploadError && (
+              <div className="sm:col-span-12 p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center gap-2">
+                <Info className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{uploadError}</span>
+              </div>
+            )}
           </div>
         </div>
 

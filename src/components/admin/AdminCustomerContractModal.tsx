@@ -163,13 +163,13 @@ export const AdminCustomerContractModal: React.FC<AdminCustomerContractModalProp
 
     const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
     if (!file.type.startsWith('image/') && !isPdf) {
-      alert('لطفاً فقط تصویر (JPG/PNG) یا فایل PDF انتخاب فرمایید.');
+      setFormError('لطفاً فقط تصویر (JPG/PNG) یا فایل PDF انتخاب فرمایید.');
       resetInput();
       return;
     }
     // Keep data-URLs small enough for localStorage / DB text columns.
     if (file.size > 2 * 1024 * 1024) {
-      alert('حجم فایل انتخابی بیشتر از ۲ مگابایت است. لطفاً حجم فایل را کاهش دهید.');
+      setFormError('حجم فایل انتخابی بیشتر از ۲ مگابایت است. لطفاً حجم فایل را کاهش دهید.');
       resetInput();
       return;
     }
@@ -178,11 +178,12 @@ export const AdminCustomerContractModal: React.FC<AdminCustomerContractModalProp
     reader.onload = (event) => {
       if (event.target?.result) {
         setReceiptImage(event.target.result as string);
+        setFormError('');
       }
       resetInput();
     };
     reader.onerror = () => {
-      alert('خواندن فایل ناموفق بود. لطفاً دوباره تلاش کنید.');
+      setFormError('خواندن فایل ناموفق بود. لطفاً دوباره تلاش کنید.');
       resetInput();
     };
     reader.readAsDataURL(file);

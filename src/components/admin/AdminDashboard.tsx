@@ -46,6 +46,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
+  AlertCircle,
   TrendingUp,
   DollarSign,
   FileSpreadsheet,
@@ -202,6 +203,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [showTechsModal, setShowTechsModal] = useState(false);
   const [newPasswordValue, setNewPasswordValue] = useState('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [userRoleFilter, setUserRoleFilter] = useState<'all' | 'staff' | 'customer'>('all');
   const [showNewUserModal, setShowNewUserModal] = useState(false);
   const [newUserData, setNewUserData] = useState<{
@@ -736,6 +738,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
              <div className="mb-6 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center gap-2">
                <CheckCircle2 className="w-4 h-4" />
                {successMessage}
+             </div>
+           )}
+           {errorMessage && (
+             <div className="mb-6 p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center gap-2">
+               <AlertCircle className="w-4 h-4 text-rose-600" />
+               {errorMessage}
              </div>
            )}
            {activeTab === 'overview' && (
@@ -2233,7 +2241,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     setSuccessMessage(`نقش کاربر «${p.fullName}» با موفقیت به «${roleTitle}» تغییر یافت و ذخیره شد.`);
                                     setTimeout(() => setSuccessMessage(null), 3500);
                                   } catch (err: any) {
-                                    alert(err?.message || 'خطا در تغییر نقش کاربر در سرور.');
+                                    setErrorMessage(err?.message || 'خطا در تغییر نقش کاربر در سرور.');
+                                    setTimeout(() => setErrorMessage(null), 4000);
                                     setProfiles(labDb.getProfiles());
                                   }
                                 }}

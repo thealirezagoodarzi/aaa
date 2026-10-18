@@ -147,8 +147,8 @@ export const PrintContractModal: React.FC<PrintContractModalProps> = ({
       setNotification('فایل Word قرارداد با موفقیت تولید و دانلود شد.');
       setTimeout(() => setNotification(null), 4000);
     } catch (e) {
-      console.error('DOCX download error:', e);
-      alert('خطا در ایجاد فایل Word، لطفاً از دکمه چاپ یا PDF استفاده فرمایید.');
+      setNotification('خطا در ایجاد فایل Word، لطفاً از دکمه چاپ یا PDF استفاده فرمایید.');
+      setTimeout(() => setNotification(null), 5000);
     } finally {
       setIsGeneratingDocx(false);
     }

@@ -66,6 +66,7 @@ export const OperatorResultModal: React.FC<OperatorResultModalProps> = ({
     (report.photos && report.photos[0]) || LAB_IMAGES.cubeFracture
   );
   const [uploadedPhotoUrl, setUploadedPhotoUrl] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Helper to calculate MPa from kN
   const calculateMpa = (loadKnVal: number) => {
@@ -84,7 +85,8 @@ export const OperatorResultModal: React.FC<OperatorResultModalProps> = ({
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      alert('لطفاً یک فایل تصویری معتبر انتخاب فرمایید.');
+      setUploadError('لطفاً یک فایل تصویری معتبر انتخاب فرمایید.');
+      setTimeout(() => setUploadError(null), 4000);
       return;
     }
 
@@ -466,6 +468,12 @@ export const OperatorResultModal: React.FC<OperatorResultModalProps> = ({
                   )}
                 </div>
               </div>
+              {uploadError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{uploadError}</span>
+                </div>
+              )}
             </div>
           </div>
 
