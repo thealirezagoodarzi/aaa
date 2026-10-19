@@ -64,7 +64,7 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
   res.setHeader('X-Content-Type-Options', 'nosniff');
   // Allow framing in AI Studio iFrame
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(), payment=()');
   // HTTPS is terminated by nginx; HSTS is ALSO set there (deploy/*.conf) so it
   // survives even if an asset is served directly by the edge cache.
   if (process.env.NODE_ENV === 'production') {

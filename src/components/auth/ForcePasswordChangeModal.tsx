@@ -37,7 +37,7 @@ export const ForcePasswordChangeModal: React.FC<ForcePasswordChangeModalProps> =
     if (newPw !== confirmPw) return isFa ? 'تکرار رمز عبور جدید مطابقت ندارد.' : 'Confirmed password does not match.';
     // Reject known default/legacy credentials
     const lower = newPw.trim().toLowerCase();
-    if (lower === 'ag12258' || lower === 'admin@123' && user.role !== 'admin') {
+    if (lower === 'ag12258' || lower === 'admin@123' || lower === 'admin123' || lower === '12345678') {
       return isFa ? 'استفاده از رمزهای پیش‌فرض سیستم ممنوع است.' : 'Default system passwords are not allowed.';
     }
     return null;

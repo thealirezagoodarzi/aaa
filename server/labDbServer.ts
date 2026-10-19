@@ -383,9 +383,12 @@ function bootstrapPasswordHash(): string {
 // secret as a public API surface (permanent audit finding otherwise).
 const LEGACY_DEFAULT_PASSWORD = 'Ag12258';
 
-/** True when `candidate` is exactly the well-known legacy default (blacklist match). */
+/** True when `candidate` is a known legacy/default password (blacklist match). */
 export function isLegacyDefaultChoice(candidate: string): boolean {
-  return typeof candidate === 'string' && candidate === LEGACY_DEFAULT_PASSWORD;
+  if (typeof candidate !== 'string') return false;
+  const c = candidate.trim();
+  const lower = c.toLowerCase();
+  return c === LEGACY_DEFAULT_PASSWORD || lower === 'ag12258' || lower === 'admin@123' || lower === 'admin123' || lower === '12345678';
 }
 
 /** True when a STORED scrypt hash was derived from the public legacy default. */
@@ -3010,10 +3013,11 @@ export async function updateUserPassword(
  * numbers with 400, and silently drops unknown keys / functions / symbols.
  */
 const DISPATCH_ALLOWED_KEYS = [
-  'id', 'ticketNo', 'status', 'customerName', 'contactPhone', 'companyName',
+  'id', 'ticketNo', 'status', 'customerId', 'customerName', 'contactPhone', 'companyName',
   'projectName', 'projectAddress', 'concreteGrade', 'volumeM3', 'plannedDate',
-  'plannedTime', 'testType', 'sampleSeriesCount', 'notes', 'description',
-  'source', 'createdAt', 'updatedAt', 'technicianName', 'scheduledAt',
+  'plannedTime', 'scheduledDateJalali', 'scheduledTime', 'serviceType', 'testType',
+  'sampleSeriesCount', 'notes', 'description', 'source', 'createdAt', 'updatedAt',
+  'technicianName', 'scheduledAt',
 ] as const;
 const MAX_DISPATCH_FIELD_LEN = 500;
 const MAX_DISPATCH_NESTED_JSON_LEN = 4000;
@@ -3141,6 +3145,17 @@ export function validateCustomerPayload(customer: any): void {
     const num = Number(raw);
     if (!Number.isFinite(num) || num < 0 || num > MAX_AMOUNT) {
       throw Object.assign(new Error(`مقدار «${field}» نامعتبر است (باید عددی بین ۰ تا سقف مجاز باشد).`), { statusCode: 400 });
+    }
+  }
+
+  // Security hardening: validate uploaded contract/receipt files for safe mime types and size caps
+  if (customer.receiptImage) {
+    if (typeof customer.receiptImage !== 'string' || customer.receiptImage.length > 3 * 1024 * 1024) {
+      throw Object.assign(new Error('حجم تصویر فیش یا مدرک انتخابی بیش از حد مجاز است (حداکثر ۳ مگابایت).'), { statusCode: 400 });
+    }
+    const safeDataUrlPrefix = /^data:(image\/(jpeg|png|webp|gif)|application\/pdf);base64,/i;
+    if (!customer.receiptImage.startsWith('http://') && !customer.receiptImage.startsWith('https://') && !customer.receiptImage.startsWith('/') && !safeDataUrlPrefix.test(customer.receiptImage)) {
+      throw Object.assign(new Error('فرمت تصویر فیش یا سند معتبر نیست (فقط تصاویر JPG/PNG/WebP یا فایل PDF مجاز است).'), { statusCode: 400 });
     }
   }
 }

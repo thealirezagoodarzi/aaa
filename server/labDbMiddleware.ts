@@ -1050,6 +1050,15 @@ export async function handleLabDataApi(
         res.end(JSON.stringify({ success: false, error: 'نام و شماره تماس معتبر الزامی است.' }));
         return;
       }
+
+      // IDOR defense: if authenticated as customer, strictly bind dispatch to their own customerId.
+      // If unauthenticated guest submission, do not allow arbitrary customerId attachment.
+      if (authUser && authUser.role === 'customer') {
+        dispatch.customerId = authUser.customerId || undefined;
+      } else if (!authUser) {
+        delete dispatch.customerId;
+      }
+
       const saved = await withDbWrite(() => addDispatch(dispatch));
       const state = getDatabaseState();
       res.statusCode = 200;

@@ -31,7 +31,7 @@ export const OperatorCustomersList: React.FC<OperatorCustomersListProps> = ({ cu
       c.companyName.toLowerCase().includes(q) ||
       c.representativeName.toLowerCase().includes(q) ||
       c.phone.includes(q) ||
-      c.projectNames.some(p => p.toLowerCase().includes(q))
+      (c.projectNames || []).some(p => p.toLowerCase().includes(q))
     );
   });
 
@@ -135,7 +135,7 @@ export const OperatorCustomersList: React.FC<OperatorCustomersListProps> = ({ cu
                   <span>پروژه‌های تحت نظارت:</span>
                 </span>
                 <div className="flex flex-wrap gap-1.5">
-                  {cust.projectNames.map((proj, pIdx) => (
+                  {(cust.projectNames || []).map((proj, pIdx) => (
                     <span
                       key={pIdx}
                       className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-medium"
@@ -206,7 +206,7 @@ export const OperatorCustomersList: React.FC<OperatorCustomersListProps> = ({ cu
               <div className="p-3 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800">
                 <span className="text-slate-400 block text-[11px] mb-1">پروژه‌های تحت نظارت:</span>
                 <ul className="list-disc list-inside space-y-1 font-medium text-slate-800 dark:text-slate-200">
-                  {selectedCustomer.projectNames.map((p, idx) => (
+                  {(selectedCustomer.projectNames || []).map((p, idx) => (
                     <li key={idx}>{p}</li>
                   ))}
                 </ul>

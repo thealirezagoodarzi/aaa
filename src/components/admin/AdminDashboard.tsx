@@ -1891,7 +1891,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {customers.filter(c => 
             c.companyName.toLowerCase().includes(customerSearch.toLowerCase()) ||
             c.representativeName.toLowerCase().includes(customerSearch.toLowerCase()) ||
-            c.projectNames.some(p => p.toLowerCase().includes(customerSearch.toLowerCase()))
+            (c.projectNames || []).some(p => p.toLowerCase().includes(customerSearch.toLowerCase()))
           ).length === 0 ? (
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 text-center text-slate-400 text-xs">
               کارفرمایی با این مشخصات یافت نشد.
@@ -1901,7 +1901,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {customers.filter(c => 
                 c.companyName.toLowerCase().includes(customerSearch.toLowerCase()) ||
                 c.representativeName.toLowerCase().includes(customerSearch.toLowerCase()) ||
-                c.projectNames.some(p => p.toLowerCase().includes(customerSearch.toLowerCase()))
+                (c.projectNames || []).some(p => p.toLowerCase().includes(customerSearch.toLowerCase()))
               ).map((cust) => (
                 <div
                   key={cust.id}
@@ -2017,7 +2017,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div className="pt-1">
                       <span className="text-slate-400 block mb-1">پروژه‌های تحت آزمایش:</span>
                       <div className="flex flex-wrap gap-1">
-                        {cust.projectNames.map((proj, idx) => (
+                        {(cust.projectNames || []).map((proj, idx) => (
                           <span key={idx} className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-bold text-[11px]">
                             {proj}
                           </span>
@@ -2512,7 +2512,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   onChange={(e) => {
                     setInvoiceCustomerId(e.target.value);
                     const c = customers.find(x => x.id === e.target.value);
-                    if (c && c.projectNames.length > 0) setInvoiceProject(c.projectNames[0]);
+                    if (c && c.projectNames && c.projectNames.length > 0) setInvoiceProject(c.projectNames[0]);
                   }}
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold"
                 >
@@ -3157,7 +3157,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <label className="block font-bold mb-1">پروژه‌ها (با کاما جدا کنید)</label>
                 <input
                   type="text"
-                  value={editingCustomer.projectNames.join(', ')}
+                  value={(editingCustomer.projectNames || []).join(', ')}
                   onChange={(e) => setEditingCustomer({ ...editingCustomer, projectNames: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs"
                 />

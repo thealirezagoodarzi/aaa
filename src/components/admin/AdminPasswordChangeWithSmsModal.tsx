@@ -118,8 +118,13 @@ export const AdminPasswordChangeWithSmsModal: React.FC<AdminPasswordChangeWithSm
     }
 
     // 2. Validate new password
-    if (!newPassword || newPassword.length < 6) {
-      setError('کلمه عبور جدید باید حداقل دارای ۶ کاراکتر باشد.');
+    if (!newPassword || newPassword.trim().length < 8) {
+      setError('کلمه عبور جدید باید حداقل دارای ۸ کاراکتر باشد.');
+      return;
+    }
+    const lower = newPassword.trim().toLowerCase();
+    if (lower === 'ag12258' || lower === 'admin@123' || lower === 'admin123' || lower === '12345678') {
+      setError('استفاده از کلمات عبور ساده یا پیش‌فرض مجاز نمی‌باشد.');
       return;
     }
 

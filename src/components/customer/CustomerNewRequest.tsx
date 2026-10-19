@@ -62,47 +62,15 @@ export const CustomerNewRequest: React.FC<CustomerNewRequestProps> = ({
       notes: `${formData.sampleLocation} • ${formData.notes || 'درخواست اعزام نمونه‌گیر به کارگاه'}`
     });
 
-    // 2. Create Pending Test Report
-    const targetMap: Record<string, number> = { C20: 20, C25: 25, C30: 30, C35: 35, C40: 40, C45: 45, C50: 50 };
-    const newReport = labDb.addReport({
-      reportNo: `CTL-1403-${Math.floor(1000 + Math.random() * 9000)}`,
-      customerId: effectiveCustId,
-      customerName: effectiveCustName,
-      projectName: formData.projectName,
-      sampleLocation: formData.sampleLocation,
-      concreteGrade: formData.concreteGrade,
-      targetStrengthMpa: targetMap[formData.concreteGrade] || 30,
-      moldType: formData.moldType,
-      slumpMm: 90,
-      truckBatchNo: 'TRK-REQ-101',
-      waterCementRatio: 0.45,
-      cementType: 'سیمان پرتلند تیپ ۲',
-      samplingDateJalali: formData.scheduledDate,
-      // FIX (date consistency): the Gregorian date must be DERIVED from the
-      // Jalali sampling date chosen by the customer — previously it was always
-      // "today", which broke scheduling/sorting for future requests.
-      samplingDateGregorian: (() => {
-        const parsed = parseJalali(formData.scheduledDate);
-        if (!parsed) return new Date().toISOString().split('T')[0];
-        const g = jalaliToGregorian(parsed.jy, parsed.jm, parsed.jd);
-        return `${g.gy}-${String(g.gm).padStart(2, '0')}-${String(g.gd).padStart(2, '0')}`;
-      })(),
-      samplingTime: formData.scheduledTime,
-      curingMethod: 'حوضچه آب‌آهک استاندارد ۲۳ درجه',
-      isPassed: false,
-      status: 'pending',
-      operatorId: 'usr-operator-01',
-      operatorName: 'تکنسین اعزامی آزمایشگاه',
-      photos: []
-    });
+    const trackingCode = `CTL-${newDispatch.ticketNo.replace('DSP-', '')}`;
 
     setCreatedResult({
       ticketNo: newDispatch.ticketNo,
-      reportNo: newReport.reportNo
+      reportNo: trackingCode
     });
 
     setIsSubmitting(false);
-    onSubmit({ dispatch: newDispatch, report: newReport });
+    onSubmit({ dispatch: newDispatch, reportNo: trackingCode });
   };
 
   if (createdResult) {
