@@ -13,6 +13,7 @@ import {
   PageBorderOffsetFrom
 } from 'docx';
 import { toPersianDigits } from './jalali';
+import { downloadBlob } from './printDom';
 
 export interface ContractExportData {
   companyName?: string;
@@ -665,16 +666,7 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
   });
 
   const blob = await Packer.toBlob(doc);
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename.endsWith('.docx') ? filename : `${filename}.docx`;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => {
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, 200);
-
+  const docxFilename = filename.endsWith('.docx') ? filename : `${filename}.docx`;
+  downloadBlob(blob, docxFilename);
   return true;
 }

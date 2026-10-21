@@ -279,30 +279,48 @@ export const ThreeSlumpVisualizer: React.FC<ThreeSlumpVisualizerProps> = ({ lang
       };
     };
 
+    let isVisible = true;
+    const observer = new IntersectionObserver((entries) => {
+      isVisible = entries[0].isIntersecting;
+    }, { threshold: 0.05 });
+    observer.observe(container);
+
+    let lastRotY = -999;
+    let lastHeight = -999;
+
     // Animation Loop
     const animate = () => {
       animFrameIdRef.current = requestAnimationFrame(animate);
-      scene.rotation.y += (rotY - scene.rotation.y) * 0.1;
+      if (!isVisible) return;
+
+      const deltaRot = Math.abs(rotY - scene.rotation.y);
+      if (deltaRot > 0.0001) {
+        scene.rotation.y += (rotY - scene.rotation.y) * 0.1;
+      }
       renderer.render(scene, camera);
 
-      // Project Key Dimension Coordinates for the on-figure HUD
-      const topConePos = new THREE.Vector3(0, 0.60, 0);
-      const bottomConePos = new THREE.Vector3(0.20, 0.01, 0);
-      
+      // Project Key Dimension Coordinates for the on-figure HUD only when changed
       const currentH = concreteMeshRef.current ? 0.60 * concreteMeshRef.current.scale.y : 0.60;
-      const concreteTopPos = new THREE.Vector3(0, currentH, 0);
-      const slumpArrowPos = new THREE.Vector3(-0.06, (0.60 + currentH) / 2, 0);
-      const rulerBasePos = new THREE.Vector3(0.38, 0.01, 0);
-      const rulerTopPos = new THREE.Vector3(0.38, 0.60, 0);
+      if (Math.abs(scene.rotation.y - lastRotY) > 0.002 || Math.abs(currentH - lastHeight) > 0.002) {
+        lastRotY = scene.rotation.y;
+        lastHeight = currentH;
 
-      setCoords({
-        coneTop: projectPoint(topConePos),
-        coneBottom: projectPoint(bottomConePos),
-        concreteTop: projectPoint(concreteTopPos),
-        slumpArrowMid: projectPoint(slumpArrowPos),
-        rulerBase: projectPoint(rulerBasePos),
-        rulerTop: projectPoint(rulerTopPos)
-      });
+        const topConePos = new THREE.Vector3(0, 0.60, 0);
+        const bottomConePos = new THREE.Vector3(0.20, 0.01, 0);
+        const concreteTopPos = new THREE.Vector3(0, currentH, 0);
+        const slumpArrowPos = new THREE.Vector3(-0.06, (0.60 + currentH) / 2, 0);
+        const rulerBasePos = new THREE.Vector3(0.38, 0.01, 0);
+        const rulerTopPos = new THREE.Vector3(0.38, 0.60, 0);
+
+        setCoords({
+          coneTop: projectPoint(topConePos),
+          coneBottom: projectPoint(bottomConePos),
+          concreteTop: projectPoint(concreteTopPos),
+          slumpArrowMid: projectPoint(slumpArrowPos),
+          rulerBase: projectPoint(rulerBasePos),
+          rulerTop: projectPoint(rulerTopPos)
+        });
+      }
     };
     animate();
 
@@ -318,6 +336,7 @@ export const ThreeSlumpVisualizer: React.FC<ThreeSlumpVisualizerProps> = ({ lang
 
     return () => {
       if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
+      observer.disconnect();
       dom.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);

@@ -3,6 +3,7 @@ import { LabMediaItem, MediaCategory, Customer, UserProfile } from '../../types'
 import { labDb } from '../../services/supabase';
 import { toPersianDigits, getTodayJalali, formatJalali } from '../../utils/jalali';
 import { downloadBlob, downloadDataUrl } from '../../utils/printDom';
+import { optimizeAndReadImageFile } from '../../utils/fileUpload';
 import { 
   Camera, 
   Upload, 
@@ -89,25 +90,20 @@ export const PhotoGalleryViewer: React.FC<PhotoGalleryViewerProps> = ({
     return () => unsub();
   }, [customerId]);
 
-  const handleFileSelection = (file: File) => {
+  const handleFileSelection = async (file: File) => {
     setUploadError(null);
     if (!file.type.startsWith('image/')) {
       setUploadError('تنها بارگذاری فایل‌های تصویری (JPG, PNG, WebP) مجاز است.');
       return;
     }
 
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
-      setUploadError(`خطای محدودیت حجم: حجم تصویر انتخاب شده (${toPersianDigits(sizeMb)} مگابایت) بیشتر از سقف مجاز ۲ مگابایت است. لطفاً حجم عکس را کاهش دهید.`);
-      return;
+    try {
+      const dataUrl = await optimizeAndReadImageFile(file, { maxWidth: 1600, maxHeight: 1600, quality: 0.82 });
+      setImagePreviewUrl(dataUrl);
+      setFileSizeBytes(Math.round(dataUrl.length * 0.75));
+    } catch (err: any) {
+      setUploadError(err?.message || 'خطا در بهینه‌سازی و بارگذاری تصویر.');
     }
-
-    setFileSizeBytes(file.size);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setImagePreviewUrl(e.target?.result as string);
-    };
-    reader.readAsDataURL(file);
   };
 
   const handleDrop = (e: React.DragEvent) => {

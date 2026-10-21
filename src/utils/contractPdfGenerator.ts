@@ -65,7 +65,8 @@ export async function downloadContractPdf(
       compress: true
     });
 
-    const finalFilename = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
+    const rawFilename = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
+    const finalFilename = rawFilename.replace(/[/\\?%*:|"<>]/g, '-').trim() || 'document.pdf';
 
     // 3. Render each authored page individually onto an A4 PDF sheet
     for (let i = 0; i < targets.length; i++) {

@@ -197,12 +197,19 @@ export const ThreeNdtVisualizer: React.FC<ThreeNdtVisualizerProps> = ({ language
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
 
+    let isVisible = true;
+    const observer = new IntersectionObserver((entries) => {
+      isVisible = entries[0].isIntersecting;
+    }, { threshold: 0.05 });
+    observer.observe(container);
+
     // Animation Loop
     let animationFrameId: number;
     let clock = new THREE.Clock();
 
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
+      if (!isVisible) return;
       const time = clock.getElapsedTime();
 
       // Subtle slow floating rotation if not dragging
@@ -258,6 +265,7 @@ export const ThreeNdtVisualizer: React.FC<ThreeNdtVisualizerProps> = ({ language
 
     return () => {
       cancelAnimationFrame(animationFrameId);
+      observer.disconnect();
       window.removeEventListener('resize', handleResize);
       dom.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('mousemove', onMouseMove);

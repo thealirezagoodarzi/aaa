@@ -104,29 +104,43 @@ export function printOnlyNode(target: HTMLElement): boolean {
 }
 
 /**
+ * Sanitizes a filename across all operating systems (Windows, macOS, Linux, Android, iOS),
+ * stripping reserved characters (/ \ ? % * : | " < >) and control characters.
+ */
+export function sanitizeFilename(filename: string, fallback = 'download'): string {
+  if (!filename || typeof filename !== 'string') return fallback;
+  let clean = filename.replace(/[/\\?%*:|"<>]/g, '-').trim();
+  clean = clean.replace(/[\x00-\x1f\x80-\x9f]/g, '');
+  clean = clean.replace(/-+/g, '-');
+  return clean || fallback;
+}
+
+/**
  * Triggers a real browser download for a Blob and revokes the object URL.
- * Works around Safari quirks by appending the anchor to the DOM.
+ * Works across desktop and mobile browsers (Chrome, Safari, Firefox, Edge).
  */
 export function downloadBlob(blob: Blob, filename: string): void {
+  const safeFilename = sanitizeFilename(filename);
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = filename;
+  a.download = safeFilename;
   a.rel = 'noopener';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   // Revoke asynchronously so the download has time to start.
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
 /**
  * Downloads a data-URL (e.g. canvas.toDataURL) without leaking anchors.
  */
 export function downloadDataUrl(dataUrl: string, filename: string): void {
+  const safeFilename = sanitizeFilename(filename);
   const a = document.createElement('a');
   a.href = dataUrl;
-  a.download = filename;
+  a.download = safeFilename;
   a.rel = 'noopener';
   document.body.appendChild(a);
   a.click();

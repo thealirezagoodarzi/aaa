@@ -67,7 +67,8 @@ export const PrintCertificate: React.FC<PrintCertificateProps> = ({
     setIsExportingPdf(true);
     try {
       const { downloadContractPdf } = await import('../../utils/contractPdfGenerator');
-      const res = await downloadContractPdf('certificate-print-area', `Gvahinameh-${report.reportNo || report.id || 'lab'}.pdf`);
+      const safeReportNo = (report.reportNo || report.id || 'lab').replace(/[/\\?%*:|"<>]/g, '-');
+      const res = await downloadContractPdf('certificate-print-area', `Gvahinameh-${safeReportNo}.pdf`);
       if (!res || !res.success) {
         // Generator failed / timed out: open exactly ONE controlled print dialog.
         printCertificate();

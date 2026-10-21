@@ -5,6 +5,7 @@ import { generateRandomPassword } from '../../utils/passwordCrypto';
 // BUG FIX (ID collision): was `usr-${Date.now().toString(36)}` — see src/utils/uniqueId.ts
 import { uniqueId } from '../../utils/uniqueId';
 import { getTodayJalali, formatJalali, toPersianDigits } from '../../utils/jalali';
+import { optimizeAndReadImageFile } from '../../utils/fileUpload';
 import { 
   Building2, 
   User, 
@@ -153,7 +154,7 @@ export const AdminCustomerContractModal: React.FC<AdminCustomerContractModalProp
   if (!isOpen) return null;
 
   // Handle receipt image file selection
-  const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -163,30 +164,20 @@ export const AdminCustomerContractModal: React.FC<AdminCustomerContractModalProp
 
     const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
     if (!file.type.startsWith('image/') && !isPdf) {
-      setFormError('لطفاً فقط تصویر (JPG/PNG) یا فایل PDF انتخاب فرمایید.');
-      resetInput();
-      return;
-    }
-    // Keep data-URLs small enough for localStorage / DB text columns.
-    if (file.size > 2 * 1024 * 1024) {
-      setFormError('حجم فایل انتخابی بیشتر از ۲ مگابایت است. لطفاً حجم فایل را کاهش دهید.');
+      setFormError('لطفاً فقط تصویر (JPG/PNG/WebP) یا فایل PDF انتخاب فرمایید.');
       resetInput();
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (event.target?.result) {
-        setReceiptImage(event.target.result as string);
-        setFormError('');
-      }
+    try {
+      const dataUrl = await optimizeAndReadImageFile(file, { maxWidth: 1600, maxHeight: 1600, quality: 0.82 });
+      setReceiptImage(dataUrl);
+      setFormError('');
+    } catch (err: any) {
+      setFormError(err?.message || 'خواندن فایل ناموفق بود. لطفاً دوباره تلاش کنید.');
+    } finally {
       resetInput();
-    };
-    reader.onerror = () => {
-      setFormError('خواندن فایل ناموفق بود. لطفاً دوباره تلاش کنید.');
-      resetInput();
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
   // Auto calculate total contract amount when series count or unit price changes

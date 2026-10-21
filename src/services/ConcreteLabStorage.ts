@@ -91,6 +91,8 @@ export class ConcreteLabStorage {
   private state: StorageDataState;
   private currentUser: UserProfile | null = null;
   private sessionToken: string | null = null;
+  private sseReconnectTimer: any = null;
+  private sseRetryCount: number = 0;
 
   constructor() {
     // 1. Initialize RAM state cleanly with real data structure (no mock/test records)
@@ -124,6 +126,16 @@ export class ConcreteLabStorage {
         const savedToken = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('azma_session_token') : null)
           || (typeof localStorage !== 'undefined' ? localStorage.getItem('azma_session_token_v2') : null);
         if (savedToken) this.sessionToken = savedToken;
+
+        const savedUserJson = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('azma_current_user') : null;
+        if (savedUserJson) {
+          try {
+            const parsedUser = JSON.parse(savedUserJson);
+            if (parsedUser && typeof parsedUser === 'object' && parsedUser.id) {
+              this.currentUser = parsedUser;
+            }
+          } catch (e) {}
+        }
       } catch (e) {
         // ignore
       }
@@ -197,6 +209,7 @@ export class ConcreteLabStorage {
       localStorage.removeItem('lab_refresh_token');
       localStorage.removeItem('azma_session_token_v2');
       sessionStorage.removeItem('azma_session_token');
+      sessionStorage.removeItem('azma_current_user');
     } catch (e) {}
     this.setSessionToken(null);
     this.setCurrentUser(null as any);
@@ -216,13 +229,24 @@ export class ConcreteLabStorage {
       } catch (e) {
         // ignore
       }
-      // BUG FIX (proactive renewal): re-arm the pre-expiry refresh timer every
-      // time a (rotated) session token is installed, and disarm on logout.
+      // Re-arm proactive renewal and real-time SSE stream
       if (token) {
         this.scheduleProactiveRefresh();
-      } else if (this.proactiveRefreshTimer) {
-        clearTimeout(this.proactiveRefreshTimer);
-        this.proactiveRefreshTimer = null;
+        this.connectSse();
+      } else {
+        if (this.proactiveRefreshTimer) {
+          clearTimeout(this.proactiveRefreshTimer);
+          this.proactiveRefreshTimer = null;
+        }
+        if (this.eventSource) {
+          try { this.eventSource.close(); } catch (e) {}
+          this.eventSource = null;
+        }
+        if (this.sseReconnectTimer) {
+          clearTimeout(this.sseReconnectTimer);
+          this.sseReconnectTimer = null;
+        }
+        this.syncStatus.connected = false;
       }
     }
   }
@@ -632,21 +656,32 @@ export class ConcreteLabStorage {
 
   private connectSse() {
     if (typeof window === 'undefined' || typeof EventSource === 'undefined') return;
+    if (this.sseReconnectTimer) {
+      clearTimeout(this.sseReconnectTimer);
+      this.sseReconnectTimer = null;
+    }
     if (this.eventSource) {
       try { this.eventSource.close(); } catch (e) {}
+      this.eventSource = null;
     }
+    // Only connect SSE if authenticated: public guests and logged-out users do not need real-time streams
+    // and would trigger an immediate 401 loop from the server.
+    if (!this.sessionToken) return;
+
     try {
-      // SECURITY FIX (audit #18): SSE endpoint now requires a valid session
-      // token; EventSource cannot send headers, so pass it as a query param.
-      const sseUrl = this.sessionToken
-        ? `/api/lab-data/events?token=${encodeURIComponent(this.sessionToken)}`
-        : '/api/lab-data/events';
-      this.eventSource = new EventSource(sseUrl);
-      this.eventSource.onopen = () => {
-        this.syncStatus.connected = true;
-        this.notify();
+      const sseUrl = `/api/lab-data/events?token=${encodeURIComponent(this.sessionToken)}`;
+      const es = new EventSource(sseUrl);
+      this.eventSource = es;
+
+      es.onopen = () => {
+        this.sseRetryCount = 0;
+        if (!this.syncStatus.connected) {
+          this.syncStatus.connected = true;
+          this.notify();
+        }
       };
-      this.eventSource.onmessage = (event) => {
+
+      es.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data);
           if (payload.type === 'db_update') {
@@ -654,13 +689,6 @@ export class ConcreteLabStorage {
             this.syncStatus.version = payload.version || this.syncStatus.version;
             this.syncStatus.lastSyncTime = Date.now();
 
-            // PERF FIX (audit #39): incremental sync. The server now tags each
-            // db_update event with the single collection that changed (for
-            // staff roles). Instead of re-fetching the ENTIRE dataset — which
-            // includes every base64 media item — on every write by any user,
-            // we fetch only that one collection's array. Unknown/multi/
-            // role-filtered events (no `collection` field) fall back to the
-            // previous full fetch so behavior can never regress silently.
             const changed: string | undefined =
               typeof payload.collection === 'string' ? payload.collection : undefined;
             if (changed && Object.prototype.hasOwnProperty.call(this.state, changed)) {
@@ -678,10 +706,24 @@ export class ConcreteLabStorage {
           // ignore
         }
       };
-      this.eventSource.onerror = () => {
-        this.syncStatus.connected = false;
-        this.notify();
-        setTimeout(() => this.connectSse(), 4000);
+
+      es.onerror = () => {
+        if (this.eventSource === es) {
+          try { es.close(); } catch (e) {}
+          this.eventSource = null;
+        }
+        if (this.syncStatus.connected) {
+          this.syncStatus.connected = false;
+          this.notify();
+        }
+        if (!this.sessionToken) return;
+
+        this.sseRetryCount++;
+        const backoff = Math.min(1500 * Math.pow(1.5, Math.min(this.sseRetryCount, 6)), 30000);
+        this.sseReconnectTimer = setTimeout(() => {
+          this.sseReconnectTimer = null;
+          this.connectSse();
+        }, backoff);
       };
     } catch (err) {
       console.debug('SSE connection init error:', err);
@@ -1134,6 +1176,15 @@ export class ConcreteLabStorage {
 
   public setCurrentUser(user: UserProfile | null, opts?: { skipServerSync?: boolean }) {
     this.currentUser = user;
+    if (typeof sessionStorage !== 'undefined') {
+      try {
+        if (user) {
+          sessionStorage.setItem('azma_current_user', JSON.stringify(user));
+        } else {
+          sessionStorage.removeItem('azma_current_user');
+        }
+      } catch (e) {}
+    }
     if (!user) {
       this.setSessionToken(null);
     }
@@ -1715,6 +1766,39 @@ export class ConcreteLabStorage {
     });
 
     return newPayment;
+  }
+
+  /**
+   * Safe customer payment declaration: records a pending receipt on the server
+   * without requiring unprivileged users to bulk-sync the entire accounting/customers tables.
+   */
+  public async notifyPayment(data: {
+    customerId: string;
+    amount: number;
+    method: string;
+    documentNo: string;
+    bankName: string;
+    jalaliDate: string;
+    description: string;
+    invoiceId?: string;
+  }): Promise<boolean> {
+    try {
+      const res = await this.authedFetch('/api/lab-data/notify-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) return false;
+      const json = await res.json();
+      if (json && json.success) {
+        await this.fetchFromServer(false);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error('Failed to notify payment:', e);
+      return false;
+    }
   }
 
   public deleteCustomerPayment(customerId: string, paymentId: string): boolean {

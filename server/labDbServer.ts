@@ -3178,6 +3178,56 @@ export function addCustomer(customer: any): any {
   return customer;
 }
 
+export function recordCustomerPaymentNotification(
+  customerId: string,
+  paymentData: {
+    amount: number;
+    method: string;
+    documentNo: string;
+    bankName: string;
+    jalaliDate: string;
+    description: string;
+    registeredBy: string;
+    invoiceId?: string;
+  }
+): any {
+  const current = getDatabaseState();
+  if (!current.customers) current.customers = [];
+  const cust = current.customers.find((c: any) => c.id === customerId);
+  if (!cust) {
+    throw Object.assign(new Error('کارفرما با این شناسه یافت نشد.'), { statusCode: 404 });
+  }
+
+  const paymentRecord = {
+    id: `pay-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    amount: paymentData.amount,
+    method: paymentData.method,
+    documentNo: paymentData.documentNo,
+    bankName: paymentData.bankName,
+    jalaliDate: paymentData.jalaliDate,
+    description: paymentData.description,
+    registeredBy: paymentData.registeredBy,
+    status: 'pending',
+    createdAt: new Date().toISOString()
+  };
+
+  if (!cust.paymentRecords) cust.paymentRecords = [];
+  cust.paymentRecords.unshift(paymentRecord);
+
+  if (paymentData.invoiceId && current.invoices) {
+    const inv = current.invoices.find((i: any) => i.id === paymentData.invoiceId && i.customerId === customerId);
+    if (inv && inv.status !== 'paid') {
+      inv.status = 'pending_settlement';
+      inv.settlementRequestedAt = new Date().toISOString();
+      inv.settlementNotes = `رسید واریز شماره ${paymentData.documentNo}`;
+    }
+    saveStateToDisk(current, 'invoices');
+  }
+
+  saveStateToDisk(current, 'customers');
+  return paymentRecord;
+}
+
 // Add or update a profile
 export function addProfileServer(profile: any): any {
   const current = getDatabaseState();

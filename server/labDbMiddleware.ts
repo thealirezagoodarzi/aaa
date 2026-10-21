@@ -46,6 +46,7 @@ import {
   restoreNamedBackup,
   findProfileById,
   getSanitizedCollection,
+  recordCustomerPaymentNotification,
   TokenPayload
 } from './labDbServer';
 
@@ -1060,6 +1061,63 @@ export async function handleLabDataApi(
       }
 
       const saved = await withDbWrite(() => addDispatch(dispatch));
+      const state = getDatabaseState();
+      res.statusCode = 200;
+      res.end(JSON.stringify({
+        success: true,
+        timestamp: state.lastUpdated,
+        version: state.version,
+        data: saved
+      }));
+      return;
+    }
+
+    // 15b. POST /api/lab-data/notify-payment (Authenticated Customer, Operator, or Admin)
+    if (url === '/api/lab-data/notify-payment') {
+      if (!authUser) {
+        res.statusCode = 401;
+        res.end(JSON.stringify({ success: false, error: 'Unauthorized: ورود به سامانه الزامی است.' }));
+        return;
+      }
+      const { customerId, invoiceId, amount, method, documentNo, bankName, jalaliDate, description } = payload;
+      let targetCustId = typeof customerId === 'string' ? customerId.trim() : '';
+      if (authUser.role === 'customer') {
+        if (!authUser.customerId) {
+          res.statusCode = 403;
+          res.end(JSON.stringify({ success: false, error: 'شناسه کاربری شما به هیچ پرونده کارفرمایی متصل نیست.' }));
+          return;
+        }
+        targetCustId = authUser.customerId;
+      }
+      if (!targetCustId) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ success: false, error: 'شناسه کارفرما نامعتبر است.' }));
+        return;
+      }
+      const numAmount = Number(amount);
+      if (!Number.isFinite(numAmount) || numAmount <= 0) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ success: false, error: 'مبلغ اعلامی باید عددی مثبت باشد.' }));
+        return;
+      }
+      const cleanDocNo = typeof documentNo === 'string' ? documentNo.trim() : '';
+      if (!cleanDocNo || cleanDocNo.length > 100) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ success: false, error: 'شماره سند یا رسید پیگیری واریز الزامی است.' }));
+        return;
+      }
+
+      const saved = await withDbWrite(() => recordCustomerPaymentNotification(targetCustId, {
+        amount: numAmount,
+        method: typeof method === 'string' ? method.slice(0, 50) : 'bank_transfer',
+        documentNo: cleanDocNo,
+        bankName: typeof bankName === 'string' ? bankName.slice(0, 100) : 'حواله بانکی',
+        jalaliDate: typeof jalaliDate === 'string' ? jalaliDate.slice(0, 30) : '',
+        description: typeof description === 'string' ? description.slice(0, 500) : '',
+        registeredBy: `کارفرما (${authUser.fullName || authUser.username})`,
+        invoiceId: typeof invoiceId === 'string' ? invoiceId.trim() : undefined
+      }));
+
       const state = getDatabaseState();
       res.statusCode = 200;
       res.end(JSON.stringify({

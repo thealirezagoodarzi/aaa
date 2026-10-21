@@ -352,11 +352,16 @@ export const ThreeConcretePress: React.FC<ThreeConcretePressProps> = ({ language
 
     dom.addEventListener('touchstart', onTouchStart, { passive: true });
     dom.addEventListener('touchmove', onTouchMove, { passive: true });
-    dom.addEventListener('touchend', onTouchEnd);
+    let isVisible = true;
+    const observer = new IntersectionObserver((entries) => {
+      isVisible = entries[0].isIntersecting;
+    }, { threshold: 0.05 });
+    observer.observe(container);
 
     // Render / Animation Loop
     const animate = () => {
       animFrameIdRef.current = requestAnimationFrame(animate);
+      if (!isVisible) return;
 
       // Smooth camera orbit
       machineGroup.rotation.y += (targetRotationY - machineGroup.rotation.y) * 0.08;
@@ -383,6 +388,7 @@ export const ThreeConcretePress: React.FC<ThreeConcretePressProps> = ({ language
 
     return () => {
       if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
+      observer.disconnect();
       dom.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);

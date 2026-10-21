@@ -490,7 +490,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     ]);
     const csv = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    downloadBlob(blob, `BetonLab-Reports-Export-${formatJalali(getTodayJalali())}.csv`);
+    downloadBlob(blob, `BetonLab-Reports-Export-${formatJalali(getTodayJalali()).replace(/\//g, '-')}.csv`);
   };
 
   const filteredInvoices = invoices.filter((inv) => {
@@ -524,7 +524,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     ]);
     const csv = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    downloadBlob(blob, `BetonLab-Invoices-Export-${formatJalali(getTodayJalali())}.csv`);
+    downloadBlob(blob, `BetonLab-Invoices-Export-${formatJalali(getTodayJalali()).replace(/\//g, '-')}.csv`);
   };
 
   const handleExportTransactionsCsv = () => {
@@ -539,7 +539,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     ]);
     const csv = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    downloadBlob(blob, `BetonLab-Transactions-Ledger-${formatJalali(getTodayJalali())}.csv`);
+    downloadBlob(blob, `BetonLab-Transactions-Ledger-${formatJalali(getTodayJalali()).replace(/\//g, '-')}.csv`);
   };
 
   const handleBulkApproveConforming = () => {

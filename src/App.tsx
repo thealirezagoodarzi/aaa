@@ -64,7 +64,7 @@ export function App() {
 
   // Session restoration state (prevents premature ejection to login/landing)
   const [sessionRestoring, setSessionRestoring] = useState<boolean>(() => {
-    return !!labDb.getSessionToken() && !labDb.getCurrentUser();
+    return (!!labDb.getSessionToken() || !!labDb.getRefreshToken()) && !labDb.getCurrentUser();
   });
   const [sessionExpired, setSessionExpired] = useState<boolean>(false);
 
@@ -106,15 +106,19 @@ export function App() {
       }
     } catch (e) {}
 
-    // Restore user session from signed token if present
+    // Restore user session from signed token or refresh token if present
     const token = labDb.getSessionToken();
-    if (token && !labDb.getCurrentUser()) {
-      setSessionRestoring(true);
+    const hasRefreshToken = !!labDb.getRefreshToken();
+
+    if (token) {
+      if (!labDb.getCurrentUser()) {
+        setSessionRestoring(true);
+      }
       fetch('/api/me', {
         headers: { Authorization: `Bearer ${token}` }
       })
         .then(async (res) => {
-          if (res.status === 401 && labDb.getRefreshToken()) {
+          if (res.status === 401 && hasRefreshToken) {
             const refreshed = await labDb.tryRefreshSession();
             if (refreshed) {
               const freshUser = labDb.getCurrentUser();
@@ -135,7 +139,7 @@ export function App() {
             if (window.location.hash.startsWith('#portal') || activeView === 'portal') {
               navigateToView('portal', { replace: true });
             }
-          } else if (res.status === 401 && !labDb.getRefreshToken()) {
+          } else if (res.status === 401 && !hasRefreshToken) {
             labDb.setSessionToken(null);
             if (activeView === 'portal') {
               navigateToView('login');
@@ -145,6 +149,27 @@ export function App() {
         })
         .catch(() => {
           // On network error, retain existing tokens and avoid ejecting the user
+          setSessionRestoring(false);
+        });
+    } else if (hasRefreshToken) {
+      // Session token absent or expired, but persistent refresh token exists
+      setSessionRestoring(true);
+      labDb.tryRefreshSession()
+        .then((refreshed) => {
+          if (refreshed) {
+            const freshUser = labDb.getCurrentUser();
+            if (freshUser) {
+              setCurrentUser(freshUser);
+              if (window.location.hash.startsWith('#portal') || activeView === 'portal') {
+                navigateToView('portal', { replace: true });
+              }
+            }
+          } else if (activeView === 'portal') {
+            navigateToView('login');
+          }
+          setSessionRestoring(false);
+        })
+        .catch(() => {
           setSessionRestoring(false);
         });
     } else {

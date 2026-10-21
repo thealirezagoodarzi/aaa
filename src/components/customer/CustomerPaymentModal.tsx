@@ -74,55 +74,48 @@ export const CustomerPaymentModal: React.FC<CustomerPaymentModalProps> = ({
     setTimeout(() => setCopiedField(null), 2000);
   };
 
-  const handleSubmitNotification = (e: React.FormEvent) => {
+  const handleSubmitNotification = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customer) return;
-    setIsSubmitting(true);
-
-    const todayJalali = formatJalali(getTodayJalali());
+    setErrorMsg(null);
 
     // Validation: never record a fake/default amount — the declared payment
     // must be a positive number within the remaining balance.
     if (!Number.isFinite(finalAmount) || finalAmount <= 0) {
       setErrorMsg('مانده حسابی برای پرداخت وجود ندارد یا مبلغ اعلامی نامعتبر است.');
-      setIsSubmitting(false);
       return;
     }
     if ((customer.balance || 0) > 0 && finalAmount > (customer.balance || 0)) {
       setErrorMsg('مبلغ وارد شده بیشتر از مانده حساب است.');
-      setIsSubmitting(false);
       return;
     }
     if (!documentNo.trim()) {
       setErrorMsg('لطفاً شماره سند/رسید واریز را وارد کنید.');
-      setIsSubmitting(false);
       return;
     }
 
-    // Record the payment notification (bank name taken from the selected account card)
-    labDb.addCustomerPayment(customer.id, {
+    setIsSubmitting(true);
+    const todayJalali = formatJalali(getTodayJalali());
+
+    // Record the payment notification via the secure server endpoint
+    const ok = await labDb.notifyPayment({
+      customerId: customer.id,
       amount: finalAmount,
       method: payMethod,
       documentNo: documentNo.trim(),
       bankName: payMethod === 'card_to_card' ? 'کارت به کارت' : (selectedBank?.bank || 'حواله بانکی'),
       jalaliDate: todayJalali,
       description: `اعلام پرداخت توسط کارفرما: ${description || 'بابت تسویه فاکتور و شیت‌های آزمایش'}`,
-      registeredBy: `کارفرما (${customer.representativeName})`,
-      status: 'pending' // Pending approval from accounting admin
+      invoiceId: invoice?.id
     });
 
-    // Mark invoice(s) as pending settlement approval by admin
-    if (invoice) {
-      labDb.requestInvoiceSettlement(invoice.id, `فیش واریزی توسط مشتری: ${documentNo || 'اعلام پرداخت'}`);
-    } else {
-      labDb.requestCustomerSettlement(customer.id, `فیش واریزی توسط مشتری: ${documentNo || 'اعلام پرداخت'}`);
-    }
-
-    setTimeout(() => {
-      setIsSubmitting(false);
+    setIsSubmitting(false);
+    if (ok) {
       setSubmitted(true);
       if (onPaymentNotified) onPaymentNotified();
-    }, 600);
+    } else {
+      setErrorMsg('خطا در ثبت اعلام پرداخت در سرور. لطفاً مجدداً تلاش فرمایید.');
+    }
   };
 
   return (

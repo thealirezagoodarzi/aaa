@@ -10,6 +10,7 @@ import {
   jalaliToGregorian
 } from '../../utils/jalali';
 import { LAB_IMAGES } from '../../assets/images';
+import { optimizeAndReadImageFile } from '../../utils/fileUpload';
 import { 
   FlaskConical, 
   CheckCircle2, 
@@ -91,7 +92,7 @@ export const OperatorNewTest: React.FC<OperatorNewTestProps> = ({
     'C50': 50,
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -101,13 +102,15 @@ export const OperatorNewTest: React.FC<OperatorNewTestProps> = ({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
+    try {
+      const result = await optimizeAndReadImageFile(file, { maxWidth: 1600, maxHeight: 1600, quality: 0.82 });
       setUploadedPhotoUrl(result);
       setSelectedPhoto(result);
-    };
-    reader.readAsDataURL(file);
+      setUploadError(null);
+    } catch (err: any) {
+      setUploadError(err?.message || 'خطا در بارگذاری تصویر.');
+      setTimeout(() => setUploadError(null), 4000);
+    }
   };
 
   const handleRemoveUploadedPhoto = () => {
