@@ -1432,49 +1432,36 @@ export class ConcreteLabStorage {
     // Clear any stale server rejection from a previous attempt before pushing.
     this.lastWriteError = null;
     const idx = this.state.profiles.findIndex(p => p.id === userId || p.username === userId || p.email === userId);
-    if (idx >= 0) {
-      const targetId = this.state.profiles[idx].id;
-      // FIX #1: send the plaintext new password (HTTPS-only transport) and let
-      // the server hash it with real Node crypto.scrypt. The previous client
-      // "hashing" produced digests the server could never verify, permanently
-      // locking users out of their accounts after any password change.
-      // Do NOT mirror the password into local state — the next fetchFromServer
-      // returns sanitized profiles (password-less), and pushing a local copy
-      // would fight the authoritative store.
-      if (this.currentUser && (this.currentUser.id === targetId || this.currentUser.username === this.state.profiles[idx].username)) {
-        this.currentUser.mustChangePassword = false;
-      }
-      this.notify();
-      // Await the authoritative server result — previously this ignored the
-      // HTTP status and always returned true, so a failed password change
-      // (403/400/500) looked successful to the UI.
-      // SECURITY FIX #5 companion: self-service changes must present the
-      // current credential; the server rejects them with 400 otherwise.
-      const ok = await this.pushServer('update-password', {
-        userId: targetId,
-        newPassword,
-        ...(currentPassword ? { currentPassword } : {})
-      });
-      if (ok) {
-        // The forced-change gate is satisfied server-side now; clear the local
-        // flags so subsequent writes are not held back.
-        this.passwordChangeRequired = false;
-        this.pendingNewPassword = null;
-      } else if (this.currentUser && this.currentUser.id === targetId) {
-        // Remember the just-typed password so recoverFromPasswordGate() can
-        // transparently re-login and rotate the session token.
-        this.pendingNewPassword = newPassword;
-      }
-      // Drop the plaintext from the in-memory cache immediately after the push.
-      delete (this.state.profiles[idx] as any).password;
-      if (this.currentUser && !ok) {
-        delete (this.currentUser as any).mustChangePassword;
-      }
-      if (this.currentUser) delete (this.currentUser as any).password;
-      this.notify();
-      return ok;
+    const targetId = idx >= 0 ? this.state.profiles[idx].id : userId;
+
+    if (this.currentUser && (this.currentUser.id === targetId || this.currentUser.username === targetId)) {
+      this.currentUser.mustChangePassword = false;
     }
-    return false;
+    this.notify();
+
+    // Await the authoritative server result
+    const ok = await this.pushServer('update-password', {
+      userId: targetId,
+      newPassword,
+      ...(currentPassword ? { currentPassword } : {})
+    });
+
+    if (ok) {
+      this.passwordChangeRequired = false;
+      this.pendingNewPassword = null;
+      if (idx >= 0) {
+        delete (this.state.profiles[idx] as any).password;
+      }
+    } else if (this.currentUser && this.currentUser.id === targetId) {
+      this.pendingNewPassword = newPassword;
+    }
+
+    if (this.currentUser && !ok) {
+      delete (this.currentUser as any).mustChangePassword;
+    }
+    if (this.currentUser) delete (this.currentUser as any).password;
+    this.notify();
+    return ok;
   }
 
   public registerCustomerWithAccount(

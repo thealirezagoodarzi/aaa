@@ -112,9 +112,13 @@ export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss(), aistudioMediaPlugin(), geminiApiPlugin(), labDatabasePlugin()],
     resolve: {
+      dedupe: ['react', 'react-dom'],
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
+    },
+    optimizeDeps: {
+      include: ['react', 'react-dom', 'react/jsx-runtime'],
     },
     build: {
       // PERF FIX (audit #46): lowered from 1600KB — the previous value was
