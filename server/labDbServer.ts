@@ -522,6 +522,7 @@ export interface TokenPayload {
   jti: string; // unique token id, supports server-side revocation (real logout)
   typ?: string; // token type marker — 'refresh' for refresh tokens (see generateRefreshToken)
   mustChangePassword?: boolean; // PERF FIX (audit #43): forced-password-change gate flag mirrored into the signed token payload so the middleware hot path does not need a DB scan per request. Server-managed only.
+  sessionVersion?: number; // Real-time session invalidation epoch (bumps on role change, deactivation, password reset)
 }
 
 // PERF/SECURITY FIX (audit #43): when updateUserPassword() clears a user's
@@ -640,6 +641,7 @@ export function generateSessionToken(user: any): string {
     // PERF FIX (audit #43): mirror the server-managed forced-change flag into
     // the signed payload so the middleware gate is O(1) instead of a DB scan.
     mustChangePassword: !!user.mustChangePassword,
+    sessionVersion: typeof user.sessionVersion === 'number' ? user.sessionVersion : 1,
   };
   const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const sig = crypto.createHmac('sha256', ensureSessionSecret()).update(payloadB64).digest('base64url');
@@ -662,7 +664,8 @@ export function generateRefreshToken(user: any): string {
     iat: Date.now(),
     exp: Date.now() + ttl,
     jti: `r_${crypto.randomBytes(16).toString('hex')}`,
-    typ: 'refresh'
+    typ: 'refresh',
+    sessionVersion: typeof user.sessionVersion === 'number' ? user.sessionVersion : 1,
   };
   const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const sig = crypto.createHmac('sha256', ensureSessionSecret()).update(`${payloadB64}:refresh`).digest('base64url');
@@ -683,6 +686,13 @@ export function verifyRefreshToken(token: string): TokenPayload | null {
     if (payload.typ !== 'refresh' || !payload.exp || Date.now() > payload.exp) return null;
     // SECURITY FIX (audit #12): revoked refresh tokens must not mint new sessions.
     if (payload.jti && revokedJtis.has(payload.jti)) return null;
+
+    // Fast profile check for inactivation, role change, and session invalidation
+    const current = getDatabaseState();
+    const live = findProfileById(current, payload.userId);
+    if (!live || live.status === 'inactive') return null;
+    if (live.sessionVersion && payload.sessionVersion && payload.sessionVersion < live.sessionVersion) return null;
+
     return payload;
   } catch {
     return null;
@@ -763,6 +773,15 @@ export function verifySessionToken(token: string): TokenPayload | null {
     if (payload.jti && revokedJtis.has(payload.jti)) {
       return null; // Explicitly revoked (logout)
     }
+
+    // Fast profile check for inactivation, role change, and session invalidation
+    const current = getDatabaseState();
+    const live = findProfileById(current, payload.userId);
+    if (!live || live.status === 'inactive') return null;
+    if (live.sessionVersion && payload.sessionVersion && payload.sessionVersion < live.sessionVersion) return null;
+    if (live.role !== payload.role) return null;
+    if (live.role === 'customer' && live.customerId !== payload.customerId) return null;
+
     return payload;
   } catch {
     return null;
@@ -868,6 +887,11 @@ function refreshOtpSessionUser(session: PendingOtpSession): any {
     /* fall back to cached user */
   }
   return session.user;
+}
+
+export function getPendingOtpUser(tempToken: string): any {
+  const session = pendingOtpSessions.get(tempToken);
+  return session ? session.user : null;
 }
 
 export function resendPendingOtp(tempToken: string, newCode: string): boolean {
@@ -2972,24 +2996,15 @@ export async function updateUserPassword(
     if (!ok) return 'wrong-current';
   }
 
+  const newSessionVersion = (target.sessionVersion || 1) + 1;
   current.profiles = current.profiles.map((p: any) =>
-    p === target ? { ...p, password: hashPassword(pwd), mustChangePassword: false } : p
+    p === target ? { ...p, password: hashPassword(pwd), mustChangePassword: false, sessionVersion: newSessionVersion } : p
   );
 
-  // SECURITY FIX (audit #43): re-register every live session of this user with
-  // the cleared mustChangePassword flag baked into the server-side payload.
-  // The auth gate reads the flag from the registry (O(1)) instead of hitting
-  // the DB on every authenticated request. Each session keeps its ORIGINAL
-  // jti, so already-issued client tokens remain valid — no revocation or
-  // exchange round-trip is needed and in-flight requests are never broken.
+  // AUTH-05: Invalidate all existing session tokens and refresh tokens on password change
   try {
-    for (const [jti, sess] of Array.from(activeSessions.entries())) {
-      if (String(sess.userId) !== String(target.id)) continue;
-      const fresh: TokenPayload = { ...sess, mustChangePassword: false };
-      activeSessions.set(jti, fresh);
-    }
-    persistSessions();
-  } catch { /* non-fatal: gate falls back to the DB read */ }
+    revokeAllUserSessions(target.id);
+  } catch { /* non-fatal */ }
 
   // Await the durable write so the HTTP response only reports success after
   // the credential change is actually on disk (and refresh the live cache so
@@ -3167,9 +3182,22 @@ export function addCustomer(customer: any): any {
   // Server-side validation via the SHARED helper (audit #31).
   validateCustomerPayload(customer);
 
-  const idx = current.customers.findIndex(c => c.id === customer.id || (c.phone && customer.phone && c.phone === customer.phone));
-  if (idx >= 0) {
-    current.customers[idx] = { ...current.customers[idx], ...customer };
+  const cleanPhone = customer.phone ? toEnglishDigits(String(customer.phone).trim()) : '';
+  const existingById = current.customers.find((c: any) => c.id === customer.id);
+  const existingByPhone = cleanPhone
+    ? current.customers.find((c: any) => c.phone && toEnglishDigits(String(c.phone).trim()) === cleanPhone)
+    : null;
+
+  if (existingByPhone && existingById && existingByPhone.id !== existingById.id) {
+    throw Object.assign(new Error('کارفرمایی با این شماره تماس از قبل در سیستم ثبت شده است.'), { statusCode: 409 });
+  }
+  if (existingByPhone && !existingById) {
+    throw Object.assign(new Error('کارفرمایی با این شماره تماس از قبل در سیستم ثبت شده است.'), { statusCode: 409 });
+  }
+
+  if (existingById) {
+    const idx = current.customers.indexOf(existingById);
+    current.customers[idx] = { ...existingById, ...customer, id: existingById.id };
   } else {
     current.customers.unshift(customer);
   }
@@ -3199,7 +3227,7 @@ export function recordCustomerPaymentNotification(
   }
 
   const paymentRecord = {
-    id: `pay-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    id: uniqueServerId('pay'),
     amount: paymentData.amount,
     method: paymentData.method,
     documentNo: paymentData.documentNo,
@@ -3207,6 +3235,7 @@ export function recordCustomerPaymentNotification(
     jalaliDate: paymentData.jalaliDate,
     description: paymentData.description,
     registeredBy: paymentData.registeredBy,
+    invoiceId: paymentData.invoiceId || undefined,
     status: 'pending',
     createdAt: new Date().toISOString()
   };
@@ -3228,101 +3257,162 @@ export function recordCustomerPaymentNotification(
   return paymentRecord;
 }
 
-// Add or update a profile
+export function approveCustomerPayment(customerId: string, paymentId: string, actorName = 'مدیریت مالی'): any {
+  const current = getDatabaseState();
+  if (!current.customers) current.customers = [];
+  const cust = current.customers.find((c: any) => c.id === customerId);
+  if (!cust) throw Object.assign(new Error('کارفرما یافت نشد.'), { statusCode: 404 });
+
+  const p = (cust.paymentRecords || []).find((rec: any) => rec.id === paymentId);
+  if (!p) throw Object.assign(new Error('رکورد پرداخت یافت نشد.'), { statusCode: 404 });
+
+  if (p.status === 'cleared') return p;
+
+  p.status = 'cleared';
+  p.approvedAt = new Date().toISOString();
+  p.approvedBy = actorName;
+
+  const totalPaid = cust.paymentRecords.reduce((sum: number, r: any) => sum + (r.status === 'cleared' ? r.amount : 0), 0);
+  cust.paidAmount = totalPaid;
+  cust.balance = Math.max(0, (cust.totalContractAmount || 0) - totalPaid);
+
+  if (p.invoiceId && current.invoices) {
+    const inv = current.invoices.find((i: any) => i.id === p.invoiceId);
+    if (inv) {
+      inv.status = 'paid';
+      inv.paidAt = new Date().toISOString();
+      inv.paymentMethod = p.method === 'card_to_card' ? 'online' : 'bank_transfer';
+    }
+    saveStateToDisk(current, 'invoices');
+  }
+
+  if (!current.accounting) current.accounting = [];
+  const incomeRecord = {
+    id: uniqueServerId('acc'),
+    title: `وصول وجه ${p.method === 'cheque' ? 'چک' : 'حواله/کارت'} - ${cust.companyName} (${p.documentNo})`,
+    category: 'خدمات آزمایشگاهی بتن',
+    amount: p.amount,
+    type: 'income',
+    jalaliDate: p.jalaliDate,
+    customerId: cust.id,
+    customerName: cust.companyName,
+    invoiceId: p.invoiceId || undefined,
+    referenceNo: p.documentNo || undefined,
+    description: `تایید پرداخت کارفرما توسط ${actorName}`,
+    createdBy: actorName,
+    createdAt: new Date().toISOString()
+  };
+  current.accounting.unshift(incomeRecord);
+  saveStateToDisk(current, 'accounting');
+
+  saveStateToDisk(current, 'customers');
+  return p;
+}
+
+export function rejectCustomerPayment(customerId: string, paymentId: string, reason = 'عدم تطابق با گردش حساب بانک'): any {
+  const current = getDatabaseState();
+  if (!current.customers) current.customers = [];
+  const cust = current.customers.find((c: any) => c.id === customerId);
+  if (!cust) throw Object.assign(new Error('کارفرما یافت نشد.'), { statusCode: 404 });
+
+  const p = (cust.paymentRecords || []).find((rec: any) => rec.id === paymentId);
+  if (!p) throw Object.assign(new Error('رکورد پرداخت یافت نشد.'), { statusCode: 404 });
+
+  p.status = 'bounced';
+  p.rejectionReason = reason;
+  p.rejectedAt = new Date().toISOString();
+
+  if (p.invoiceId && current.invoices) {
+    const inv = current.invoices.find((i: any) => i.id === p.invoiceId);
+    if (inv && inv.status === 'pending_settlement') {
+      inv.status = 'unpaid';
+    }
+    saveStateToDisk(current, 'invoices');
+  }
+
+  saveStateToDisk(current, 'customers');
+  return p;
+}
+
+// Add a new profile (Strict INSERT only - rejects duplicates and admin takeover)
 export function addProfileServer(profile: any): any {
   const current = getDatabaseState();
   if (!current.profiles) current.profiles = [];
 
-  if (profile.id === SOLE_ADMIN_ID || profile.username === SOLE_ADMIN_USERNAME) {
-    profile.id = SOLE_ADMIN_ID;
-    profile.username = SOLE_ADMIN_USERNAME;
-    profile.role = 'admin';
-  } else if (profile.role === 'admin') {
-    profile.role = 'operator';
+  const rawUsername = profile.username ? toEnglishDigits(String(profile.username).trim()) : '';
+  const cleanUsername = rawUsername.toLowerCase();
+
+  // AUTH-02: Prevent any actor from hijacking or re-creating the sole admin via add-profile
+  if (profile.id === SOLE_ADMIN_ID || cleanUsername === SOLE_ADMIN_USERNAME.toLowerCase()) {
+    throw Object.assign(new Error('حساب کاربری مدیر ارشد یکتا بوده و از قبل در سیستم تعریف شده است.'), { statusCode: 403 });
   }
 
-  // BUG FIX (problem #2 — "a newly created operator vanishes after one
-  // login/logout cycle"): the role/class separation between staff and
-  // customers was only enforced in the UI. A profile carrying a `customerId`
-  // link (i.e. a customer account) could be (re)created through this
-  // staff-creation endpoint with role 'operator', and conversely a customer
-  // profile without the link could be registered as staff. On the next full
-  // sync / reload such hybrid records were reclassified or dropped, making the
-  // new operator "disappear". Enforce the invariant server-side now:
-  //  - a profile linked to a customer record is ALWAYS a customer account;
-  //  - an operator/admin profile must never reference a customerId.
+  if (profile.role === 'admin') {
+    throw Object.assign(new Error('نقش مدیر ارشد سامانه منحصربه‌فرد بوده و ساخت کاربر جدید با این نقش مجاز نمی‌باشد.'), { statusCode: 403 });
+  }
+
+  // Ensure unique ID
+  profile.id = profile.id || uniqueServerId('usr');
+
+  // Enforce customer vs staff separation
   if (profile.customerId) {
     profile.role = 'customer';
-  } else if (profile.role === 'operator' || profile.role === 'admin') {
+  } else if (!profile.role || profile.role !== 'customer') {
+    profile.role = 'operator';
     delete profile.customerId;
   }
 
-  // SECURITY FIX: a genuine new-user password is hashed with real server-side scrypt.
-  // Enforce password policy BEFORE hashing and return clear Persian errors.
+  // Enforce password policy
   const rawIncomingPwd = typeof profile.password === 'string' ? profile.password.trim() : '';
   if (!rawIncomingPwd) {
-    const err: any = new Error('INVALID_PASSWORD: رمز عبور کاربر جدید الزامی است.');
-    err.statusCode = 400;
-    throw err;
+    throw Object.assign(new Error('INVALID_PASSWORD: رمز عبور کاربر جدید الزامی است.'), { statusCode: 400 });
   }
   if (rawIncomingPwd.startsWith('scrypt:')) {
-    const err: any = new Error('INVALID_PASSWORD: ارسال هش کلاینت مجاز نمی‌باشد؛ رمز عبور باید به صورت متن وارد شود.');
-    err.statusCode = 400;
-    throw err;
+    throw Object.assign(new Error('INVALID_PASSWORD: ارسال هش کلاینت مجاز نمی‌باشد؛ رمز عبور باید به صورت متن وارد شود.'), { statusCode: 400 });
   }
   if (rawIncomingPwd.length < 8) {
-    const err: any = new Error('INVALID_PASSWORD: رمز عبور باید حداقل ۸ کاراکتر باشد.');
-    err.statusCode = 400;
-    throw err;
+    throw Object.assign(new Error('INVALID_PASSWORD: رمز عبور باید حداقل ۸ کاراکتر باشد.'), { statusCode: 400 });
   }
   if (isLegacyDefaultChoice(rawIncomingPwd)) {
-    const err: any = new Error('INVALID_PASSWORD: استفاده از رمز عبور پیش‌فرض قدیمی مجاز نمی‌باشد.');
-    err.statusCode = 400;
-    throw err;
+    throw Object.assign(new Error('INVALID_PASSWORD: استفاده از رمز عبور پیش‌فرض قدیمی مجاز نمی‌باشد.'), { statusCode: 400 });
   }
 
-  // Normalize digits so Persian numerals in passwords or usernames convert reliably
   const normalizedPwd = toEnglishDigits(rawIncomingPwd);
-
-  try {
-    profile.password = hashPassword(normalizedPwd);
-  } catch (e: any) {
-    const err: any = new Error(e?.message || 'INVALID_PASSWORD: رمز عبور کاربر جدید نامعتبر است.');
-    err.statusCode = 400;
-    throw err;
-  }
-
+  profile.password = hashPassword(normalizedPwd);
   profile.mustChangePassword = storedHashIsLegacyDefault(profile.password);
+  profile.username = rawUsername;
+  profile.status = profile.status || 'active';
+  profile.sessionVersion = 1;
 
-  // Normalize username and phone
-  if (profile.username) {
-    profile.username = toEnglishDigits(String(profile.username).trim());
-  }
   if (profile.phone) {
     profile.phone = toEnglishDigits(String(profile.phone).trim());
   }
 
-  const idx = current.profiles.findIndex(p => p.id === profile.id || (p.username && profile.username && toEnglishDigits(p.username).toLowerCase() === toEnglishDigits(profile.username).toLowerCase()));
-  if (idx >= 0) {
-    // Security fix: never downgrade an existing scrypt hash with a plaintext
-    // value arriving from stale client state — only hashed credentials may
-    // overwrite an already-hashed stored password.
-    const incoming = typeof profile.password === 'string' ? profile.password : '';
-    const existingPwd = current.profiles[idx].password;
-    const merged = { ...current.profiles[idx], ...profile };
-    if (typeof existingPwd === 'string' && existingPwd.startsWith('scrypt:') && !incoming.startsWith('scrypt:')) {
-      merged.password = existingPwd;
-    }
-    current.profiles[idx] = merged;
-  } else {
-    current.profiles.unshift(profile);
+  // FIN-07 & AUTH-04: Strict uniqueness check (NO merge, NO overwrite)
+  const idClash = current.profiles.find((p: any) => p.id === profile.id);
+  if (idClash) {
+    throw Object.assign(new Error('کاربری با این شناسه از قبل در سیستم وجود دارد.'), { statusCode: 409 });
   }
 
+  const usernameClash = current.profiles.find((p: any) => p.username && toEnglishDigits(p.username).toLowerCase() === cleanUsername);
+  if (usernameClash) {
+    throw Object.assign(new Error('این نام کاربری قبلاً در سیستم ثبت شده است.'), { statusCode: 409 });
+  }
+
+  if (profile.email) {
+    const cleanEmail = String(profile.email).trim().toLowerCase();
+    const emailClash = current.profiles.find((p: any) => p.email && String(p.email).trim().toLowerCase() === cleanEmail);
+    if (emailClash) {
+      throw Object.assign(new Error('این ایمیل قبلاً در سیستم ثبت شده است.'), { statusCode: 409 });
+    }
+  }
+
+  current.profiles.unshift(profile);
   current.profiles = [...current.profiles];
   invalidateProfileIndex();
 
   saveStateToDisk(current, 'profiles');
-  return profile;
+  return sanitizeProfile(profile);
 }
 
 // Register customer and user account atomically
@@ -3866,6 +3956,11 @@ export async function authenticateUser(identifier: string, password: string): Pr
     return { success: false, error: 'نام کاربری یا رمز عبور نامعتبر است.' };
   }
 
+  // AUTH-06: Inactive users cannot authenticate
+  if (user.status === 'inactive') {
+    return { success: false, error: 'حساب کاربری شما غیرفعال شده است. لطفاً با مدیر سامانه تماس حاصل فرمایید.' };
+  }
+
   // SECURITY FIX #2 (hard-coded defaults removed): the legacy demo password is
   // NEVER accepted as a login credential — not even via a stored hash that
   // happens to match it. Accounts left on that credential must be reset
@@ -3876,10 +3971,9 @@ export async function authenticateUser(identifier: string, password: string): Pr
   }
   const enteredNorm = toEnglishDigits(enteredPassword);
 
+  // AUTH-21: Passwords MUST be case-sensitive
   const isValid = verifyPassword(enteredPassword, user.password) ||
-                  verifyPassword(enteredNorm, user.password) ||
-                  verifyPassword(enteredPassword.toLowerCase(), user.password) ||
-                  verifyPassword(enteredNorm.toLowerCase(), user.password);
+                  verifyPassword(enteredNorm, user.password);
 
   if (!isValid) {
     return { success: false, error: 'رمز عبور وارد شده صحیح نمی‌باشد.' };

@@ -1,0 +1,439 @@
+
+## ۱. P0 — احراز هویت و مجوزدهی (Blocker)
+### AUTH-01 — هر مشتری می‌تواند حساب ادمین را تصاحب کند (C1) `[E]`
+**محل:** `server/labDbMiddleware.ts:1223-1274` (گیت `isSelf` در `:1231`، تزریق `newPassword` در `:1247-1249`)؛ `server/labDbServer.ts:3567-3735` (محاسبهٔ `canWritePassword` در `:3587-3588`، بازنویسی هدف در `:3605-3609`، یافتن رکورد در `:3623-3628`، merge در `:3712-3717`).
+**علت ریشه‌ای:** سه تصمیم امنیتی از ورودی کلاینت گرفته می‌شود:
+- «خودی بودن» با `profile.id`/`profile.username` بدنه سنجیده می‌شود، نه با `authUser`.
+- اجازهٔ نوشتن رمز با `actorUserId === profile.id` سنجیده می‌شود؛ باز هم `profile.id` از بدنه است.
+- رکورد هدف با `id`/`username`/`email`/`customerId` بدنه پیدا می‌شود، در حالی که بلاک «مدیر ارشد» هر `username:'admin'` را به رکورد ادمین تبدیل می‌کند.
+**بازتولید:** مشتری با توکن خودش:
+```http
+POST /api/lab-data/update-profile
+Authorization: Bearer <customer-token>
+{
+  "profile": { "id": "usr-cust-1", "username": "admin", "phone": "09129998877" },
+  "newPassword": "Pwned#2026!"
+}
+```
+**شاهد اجرا:** `200` و پاسخ شامل `{"id":"usr-admin-01","username":"admin","phone":"09129998877","role":"admin"}`؛ سپس ورود `admin` با `Pwned#2026!` → `200` و توکن `admin`؛ سپس `GET /api/lab-data` و حتی `POST /api/lab-data/add-profile` موفق.
+**اصلاح:**
+1. برای نقش `customer`، هدف را **فقط** `authUser.userId` بگذار و هر `id`/`username`/`email`/`customerId` در بدنه را با `400` رد کن.
+2. برای `operator`/`admin` نیز هدف را فقط با `id` (پس از بررسی مجوز) پیدا کن؛ جست‌وجو با `username`/`email`/`customerId` را کامل حذف کن.
+3. `newPassword`/`password` را از `update-profile` حذف کن؛ تغییر رمز فقط از `update-password` با `currentPassword`.
+4. `phone`/`email` را فقط با جریان OTP تغییر بده؛ `role`/`status`/`mustChangePassword`/`customerId` را immutable کن.
+5. اجازهٔ نوشتن رمز را بر اساس **رکورد هدفِ resolve‌شده** محاسبه کن، نه `profile.id` ورودی.
+6. هر تغییر پروفایل/اعتبارنامه را در audit log ثبت کن (چه کسی، چه فیلدی، قبل/بعد).
+**تست پذیرش:** `tests/authorization.test.cjs`
+- مشتری با `{id:self, username:'admin'}` → `403/400`؛ رکورد ادمین بایت‌به‌بایت تغییر نکند.
+- مشتری با `{id:self, username:'cust2'}` → `403/400`.
+- ادمین با `newPassword` در این مسیر → `400` (مسیر باید حذف شده باشد).
+- ورود ادمین با رمز قبلی همچنان `200`.
+---
+### AUTH-02 — هر اپراتور می‌تواند رمز ادمین را از `add-profile` عوض کند (C4) `[E]`
+**محل:** `server/labDbMiddleware.ts:1184-1221` (اجازهٔ `admin` یا `operator`)؛ `server/labDbServer.ts:3232-3320` (بلاک ادمین در `:3236-3240`، جست‌وجو در `:3305`، merge در `:3310-3313`).
+**علت:** `addProfileServer` یک «add» نیست؛ اگر رکوردی با `username` یکسان پیدا شود آن را merge می‌کند. بلاک `username === 'admin'` هم هدف را به `usr-admin-01` تغییر می‌دهد و رمز جدید هش‌شده جایگزین رمز فعلی می‌شود. اپراتور مجاز به صدا زدن این اندپوینت است.
+**شاهد اجرا:**
+```text
+operator login: ok role=operator
+operator add-profile targeting admin: 200 {... "id":"usr-admin-01","role":"admin" ...}
+admin login with operator-set password: 200 {"role":"admin","hasToken":true}
+```
+**اصلاح:**
+- `add-profile` را به «فقط ساخت رکورد جدید» تبدیل کن: اگر `id`/`username`/`email` از قبل وجود دارد → `409`، نه merge.
+- فقط `admin` بتواند پرسنل بسازد؛ `operator` فقط از مسیر `register-customer-account` مشتری بسازد. اگر سیاست کسب‌وکار خلاف این است، حداقل هدف‌گیری رکورد ادمین را برای هر بازیگر غیرادمین `403` کن.
+- در `addProfileServer` هرگز رمز یک رکورد موجود را از این مسیر بازنویسی نکن؛ تغییر رمز فقط از `update-password`.
+- برای هر ساخت کاربر، actor و نقش را audit کن.
+**تست پذیرش:** اپراتور `add-profile` با `username:'admin'` → `403`؛ ادمین با رمز اصلی وارد شود؛ رکورد ادمین تغییر نکند. اپراتور ساخت اپراتور جدید (اگر مجاز نیست) → `403`.
+---
+### AUTH-03 — IDOR افقی: تغییر `customerId` و خواندن دادهٔ مشتری دیگر (C2) `[E]`
+**محل:** merge در `server/labDbServer.ts:3712-3717`؛ کپی `customerId` در توکن `:630-643`؛ ساخت مجدد توکن از رکورد زنده در `server/labDbMiddleware.ts:1391-1401` و `server/labDbServer.ts:654-669`؛ فیلتر داده در `server/labDbServer.ts:929-950`.
+**علت:** `customerId` فیلدی است که هم از بدنه نوشته می‌شود، هم مبنای مجوز داده است. توکن و refresh آن را از رکورد کپی می‌کنند و `sanitizeDatabaseState` فقط به همان مقدار تکیه می‌کند.
+**شاهد اجرا:** مشتری ۱ با ارسال `customerId:'cust-2'` و سپس `POST /api/lab-data/refresh` توکنی با `customerId=cust-2` گرفت و `SECRET-REPORT-2` / `INV-SECRET-2` / شرکت قربانی را خواند.
+**اصلاح:**
+- `customerId` برای نقش `customer` کاملاً server-managed و immutable باشد؛ هر تلاش تغییر → `400`.
+- تغییر آن فقط توسط `admin` و پس از اعتبارسنجی وجود پرونده، با audit.
+- پس از هر تغییر پیوند، همهٔ نشست‌ها/refresh tokenهای کاربر را باطل کن.
+- فیلتر داده را بر پایهٔ رکورد سرور (نه صرفاً claim توکن) بساز؛ توکن فقط شناسهٔ کاربر را حمل کند.
+- در `sanitizeDatabaseState`/`getSanitizedCollection` برای مشتری، `customerId` را از پروفایل زنده بخوان و اگر با توکن ناسازگار بود، `401` بده.
+**تست پذیرش:** مشتری `customerId` دیگری بفرستد → `400`؛ refresh توکن قبلی را عوض نکند؛ `GET /api/lab-data` فقط دادهٔ خودش را بدهد.
+---
+### AUTH-04 — بازنویسی هویت مشتری دیگر و ساخت رکوردهای هم‌شناسه (C3) `[E]`
+**محل:** `server/labDbServer.ts:3623-3628` (شرط `customerId` در `findIndex`)، `:3712-3717` (merge شامل `id`/`username`)، `:3572-3576` و `:3724-3738` (عدم یکتایی).
+**شاهد اجرا:**
+```text
+before: usr-cust-2:cust2:cust-2 | usr-cust-1:cust1:cust-1 | usr-admin-01:admin
+after:  usr-cust-1:cust1x:cust-2 | usr-cust-1:cust1:cust-1 | usr-admin-01:admin
+```
+رکورد `usr-cust-2` با شناسهٔ خودش حذف شده، دو رکورد با `id:usr-cust-1` ساخته شده و نام کاربری قربانی از بین رفته است. `findUserByIdentifier` برای شناسه‌های تکراری «مبهم» برمی‌گرداند (`:3842-3854`)؛ یعنی ورود هر دو حساب می‌تواند بشکند.
+**اصلاح:**
+- merge فقط با `id` و فقط روی همان رکورد؛ `id`/`username`/`email`/`customerId` ورودی اگر با رکورد موجود ناسازگار است → `409`.
+- یک constraint سراسری یکتایی در `prepareStateForSave` و همهٔ mutatorها: `id`, `username` (case-insensitive), `email` (case-insensitive), `customerId`.
+- ابزار مهاجرت برای شناسایی و ادغام/حذف رکوردهای هم‌شناسه موجود؛ قبل از حذف، ارجاعات `reports`/`invoices`/`accounting`/`dispatches` را repair کن.
+- `enforceSoleAdminRules` نباید رکوردهای تکراری را «درست» جلوه دهد؛ باید خطا بدهد یا لاگ کند.
+**تست پذیرش:** تلاش برای تغییر `id`/`username` به مقدار موجود → `409`؛ هیچ دو رکوردی با `id` یکسان پس از هر عملیات باقی نماند؛ دادهٔ قربانی سالم بماند.
+---
+## ۲. P1 — نشست، توکن و اعتبارنامه
+### AUTH-05 — تغییر رمز بدون رمز فعلی، بایپس ادمین و ابطال‌نشدن نشست‌ها `[E/C]`
+**محل:** `server/labDbMiddleware.ts:943-1028` (`update-password`، بایپس ادمین در `:1000-1006`)؛ `server/labDbMiddleware.ts:1247-1249` (`newPassword` در `update-profile`)؛ `server/labDbServer.ts:2933-3000` (`updateUserPassword`؛ گارد فقط برای هدف غیرادمین در `:2962-2966`؛ به‌روزرسانی نشست‌ها بدون ابطال در `:2984-2991`).
+**شاهد:** `update-profile` بدون `currentPassword` → `200`؛ رمز قدیمی `401`، رمز جدید `200`؛ `/update-password` بدون رمز فعلی → `400`.
+**مشکل دوم:** `update-password` برای بازیگر ادمین — حتی وقتی رمز **خودش** را عوض می‌کند — رمز فعلی را نمی‌خواهد. `updateUserPassword` هم همهٔ نشست‌های زنده را با همان `jti` نگه می‌دارد و فقط `mustChangePassword` را پاک می‌کند؛ هیچ session/refresh token باطل نمی‌شود.
+**اصلاح:**
+- `newPassword` را از `update-profile` حذف کن.
+- برای self-change (شامل ادمین) `currentPassword` الزامی کن؛ فقط reset اجباری توسط ادمین روی **کاربر دیگر** می‌تواند بدون آن باشد و باید `mustChangePassword=true` بگذارد.
+- پس از هر تغییر رمز: `revokeAllUserSessions(userId)` + ابطال همهٔ refresh tokenهای کاربر + اجبار ورود مجدد.
+- برای reset توسط ادمین، audit + پیامک/ایمیل اطلاع‌رسانی و اجبار تغییر در اولین ورود.
+**تست پذیرش:** self-change بدون رمز فعلی → `400/403`؛ ادمین هم مستثنا نباشد؛ توکن قدیمی بعد از تغییر رمز → `401`؛ refresh قدیمی → `401`.
+---
+### AUTH-06 — تغییر نقش/وضعیت روی توکن‌های موجود اثر نمی‌کند؛ کاربر غیرفعال هنوز وارد می‌شود `[E]`
+**محل:** `server/labDbMiddleware.ts:601-704` (ورود بدون بررسی `status`)؛ `server/labDbServer.ts:3863-3925` (`authenticateUser` بدون `status`)؛ `:747-770` (`verifySessionToken` فقط HMAC/exp/revoked، بدون lookup پروفایل)؛ `:3939-3971` (`updateUserRoleServer` بدون ابطال نشست)؛ `server/labDbMiddleware.ts:1374-1401` (refresh تنها جایی است که `status` را می‌بیند).
+**شاهد اجرا:**
+```text
+admin sets operator status=inactive: 200
+DISABLED operator can still login: 200 TOKEN ISSUED role=operator
+admin demotes op1 -> customer: 200
+STALE operator token still calls add-profile: 200
+refresh after 3 changes: 401
+```
+یعنی: کاربر غیرفعال با رمز خودش توکن می‌گیرد؛ اپراتور تنزل‌یافته با توکن قدیمی همچنان به اندپوینت فقط-اپراتور دسترسی دارد؛ و چون refresh فقط `status` را چک می‌کند، توکن دسترسی تا ۷ روز معتبر می‌ماند.
+**اصلاح:**
+- `authenticateUser`/`login` باید `status==='active'` را الزامی کنند؛ پیام یکسان برای جلوگیری از enumeration.
+- یک `sessionVersion`/`authEpoch` در پروفایل نگه دار؛ در توکن قرار بده؛ `verifySessionToken` یا middleware آن را با DB مقایسه کند (cache کوتاه O(1)).
+- هر تغییر `role`/`status`/`customerId`/رمز → `revokeAllUserSessions` + افزایش `sessionVersion`.
+- در `update-role` و `delete-profile` ابطال را اجباری کن؛ برای `delete` همین حالا هست، برای role نه.
+- `getSessionMustChangePassword` مرده است (`labDbServer.ts:2584`)؛ یا استفاده کن یا حذف.
+**تست پذیرش:** ورود کاربر `inactive` → `403`؛ توکن موجود بعد از inactive/role change → `401`؛ اپراتور تنزل‌یافته نتواند `add-profile` صدا بزند؛ refresh نقش جدید را بدهد.
+---
+### AUTH-07 — logout و تغییر رمز، refresh tokenهای دیگر را باطل نمی‌کنند `[E]`
+**محل:** `server/labDbServer.ts:654-669` (`generateRefreshToken` هیچ رکوردی ثبت نمی‌کند)؛ `:719-732` (`revokeAllUserSessions` فقط `activeSessions` را می‌گردد)؛ `server/labDbMiddleware.ts:1333-1371` (logout فقط refresh ارائه‌شده را باطل می‌کند).
+**شاهد:**
+```text
+two logins: true true refresh tokens differ: true
+logout with session1: 200 {"success":true,"revoked":true}
+refresh with OTHER session refresh token after logout: 200 NEW TOKEN ISSUED
+refresh with logged-out refresh token: 401
+```
+**اصلاح:**
+- refresh tokenها را با `jti` + `userId` + hash در یک registry پایدار ثبت کن (نه فقط stateless).
+- logout باید **همهٔ** refresh tokenهای کاربر را باطل کند، نه فقط توکن ارائه‌شده.
+- rotation واقعی: هر refresh، توکن قبلی را باطل و توکن جدید صادر کند؛ reuse detection → ابطال کل خانواده.
+- تغییر رمز/نقش/وضعیت/حذف کاربر → ابطال همهٔ refresh tokenها.
+- TTL را کوتاه‌تر کن (مثلاً ۷ روز با rotation، نه ۳۰ روز ثابت).
+**تست پذیرش:** دو login، logout با یکی، refresh با دومی → `401`؛ refresh token قدیمی بعد از rotation → `401`؛ تغییر رمز همه را باطل کند.
+---
+### AUTH-08 — اندپوینت بدون احراز هویت `/api/lab-data/session` که دیسک می‌نویسد `[E]`
+**محل:** `server/labDbMiddleware.ts:1313-1330`؛ `server/labDbServer.ts:3547-3552` (`setSessionUser` → `saveStateToDisk`).
+**شاهد:** `POST /api/lab-data/session` بدون توکن → `200`، `version 2→3`، بازنویسی `laboratory_db.json`.
+**اثر:** هر درخواست ناشناس، کلید/نسخهٔ SSE و etag همهٔ کلاینت‌ها را می‌شکند و یک نوشتن کامل دیسک ایجاد می‌کند؛ DoS/فرسایش دیسک. هیچ مصرف‌کنندهٔ کلاینتی هم پیدا نشد (`grep` در `src` خالی).
+**اصلاح:** اندپوینت را حذف کن. اگر لازم است، فقط با احراز هویت + rate limit + عدم نوشتن `currentUserId` روی دیسک (این فیلد سراسری اصلاً نباید ذخیره شود). هر نوشتن باید از `withDbWrite` و `saveStateToDiskAwaitable` عبور کند.
+**تست پذیرش:** بدون توکن → `404/401`؛ با توکن → هیچ تغییری در `version`/دیسک ایجاد نشود.
+---
+### AUTH-11 — اپراتور می‌تواند فیلدهای پروفایل ادمین را عوض کند `[C]`
+**محل:** `server/labDbMiddleware.ts:1231-1236` (`isStaff` برای اپراتور true)؛ `server/labDbServer.ts:3593-3603` (فقط `password`/`role`/`status`/`mustChangePassword` حذف می‌شوند؛ `phone`/`email`/`fullName`/`customerId` می‌مانند) و `:3712-3717`.
+**اثر:** اپراتور می‌تواند شمارهٔ ادمین را عوض کند (OTP ادمین به شمارهٔ او برود/ادمین قفل شود)، ایمیل/نام را تغییر دهد، یا `customerId` را دستکاری کند. این یک نقض مرز نقش است، حتی اگر مستقیماً رمز را عوض نکند.
+**اصلاح:** ویرایش پروفایل پرسنل فقط توسط خودِ شخص (فیلدهای محدود) یا ادمین؛ اپراتور اجازهٔ ویرایش ادمین/سایر پرسنل را ندارد. تغییر `phone`/`email` فقط با OTP.
+**تست:** اپراتور `update-profile` روی `usr-admin-01` → `403`؛ روی خودش فقط نام/آواتار.
+---
+### OTP-01 — `resend-otp` خراب است و کد قبلی را باطل می‌کند `[E]`
+**محل:** `server/labDbMiddleware.ts:757-800`؛ شماره از `(authUser as any)?.phone` در `:778` خوانده می‌شود، در حالی که این مسیر قبل از ورود است و `authUser=null`؛ `resendPendingOtp` در `server/labDbServer.ts:873-881` کد قبلی را باطل می‌کند.
+**شاهد:** `OTP issued: 99189`؛ `/api/resend-otp` → `success` (SMS نمی‌رود)؛ `verify-otp` با `99189` → `400`.
+**اصلاح:** شماره را از نشست معلق (`tempToken` → `pendingOtpSessions.user.phone`) بگیر، نه `authUser`؛ فقط **بعد از موفقیت ارسال** کد قبلی را باطل کن؛ خطای ارسال را به کاربر برگردان؛ در صورت شکست، کد قبلی معتبر بماند.
+**تست:** با mock provider موفق، کد جدید برسد و قبلی `400` شود؛ با provider ناموفق، کد قبلی همچنان `200` و پیام خطای شفاف.
+---
+### OTP-02 — کد OTP کامل در لاگ production چاپ می‌شود `[E]`
+**محل:** `server/smsService.ts:100-108` (fallback شبیه‌سازی)؛ فراخوانی از `server/labDbMiddleware.ts:657-671` و `:782-795`.
+**شاهد:** `[SMS:SIMULATION] Code for admin (09121234567): 99189` در لاگ.
+**اثر:** هر کسی با دسترسی به `logs/`/سیستم جمع‌آوری لاگ می‌تواند 2FA ادمین را دور بزند؛ در ترکیب با `ENABLE_SMS_OTP=1` و نبود provider، عملاً 2FA وجود ندارد.
+**اصلاح:** در production هرگز کد را لاگ نکن؛ فقط fingerprint/HMAC کوتاه. اگر provider نیست، OTP را غیرفعال و لاگ هشدار بده؛ «امنیت» جعلی نساز.
+---
+### OTP-03 — OTP پنل تغییر رمز ادمین کاملاً سمت کلاینت است `[C]`
+**محل:** `src/components/admin/AdminPasswordChangeWithSmsModal.tsx:87` (تولید با `Math.random`)، `:104-124` (مقایسهٔ محلی `cleanEntered !== otpCode`)، `:139` (`labDb.updateUserPassword`).
+**اثر:** هر کسی که این modal را باز کند (یا API را مستقیم صدا بزند) می‌تواند OTP را دور بزند؛ کد در UI نمایش داده می‌شود و از `labDb.sendSms` در `src/services/ConcreteLabStorage.ts:2238+` در `smsLogs` ذخیره می‌شود (قابل خواندن توسط همهٔ پرسنل).
+**اصلاح:** حذف این جریان؛ تغییر رمز ادمین فقط با `currentPassword` و/یا OTP سرور (`/api/login`/`verify-otp` یا اندپوینت step-up واقعی). OTP را با CSPRNG سمت سرور بساز، در DB ذخیره نکن، و در لاگ ننویس.
+---
+### OTP-04 — همهٔ `sendSms`های کلاینت فقط لاگ جعلی «delivered» هستند `[C]`
+**محل:** `src/services/ConcreteLabStorage.ts:2238-2312`؛ هیچ اندپوینت سرور برای SMS غیر-OTP وجود ندارد (`grep` روی `server/` و `src/`).
+**اثر:** پیامک خوش‌آمد مشتری، پیامک «پرداخت تأیید شد»، و پیامک OTP پنل ادمین هیچ‌گاه ارسال نمی‌شوند؛ اما `smsLogs` وضعیت `delivered` ثبت می‌کند. این یک **باگ عملکردی/حسابرسی** است: مدیر فکر می‌کند پیامک رفته و شواهد جعلی می‌بیند.
+**اصلاح:** یک اندپوینت سرور `POST /api/sms/send` با احراز هویت/مجوز، اعتبارسنجی، rate limit و اتصال به `smsService` بساز؛ وضعیت واقعی provider را ذخیره کن (`queued/sent/failed`)، نه `delivered`; پیام‌های حاوی OTP را هرگز در `smsLogs` ذخیره نکن.
+---
+### OTP-05 — تولید رمز در UI با `Math.random` و فضای کلید ۹۰۰۰ `[C]`
+**محل:** `src/components/admin/AdminCustomerContractModal.tsx:1197` و `src/components/admin/AdminDashboard.tsx:3414` (`'azma' + Math.floor(1000 + Math.random()*9000)`).
+**اثر:** رمز ۸ کاراکتری با ۴ رقم تصادفی غیرامن و پیش‌بینی‌پذیر؛ سرور آن را می‌پذیرد چون فقط طول ≥۸ و blacklist را چک می‌کند. این دقیقاً همان الگویی است که audit #8 در سرور حذف کرد، اما در کلاینت باقی مانده است.
+**اصلاح:** تولید رمز را به سرور بسپار (CSPRNG ۱۶ کاراکتری مثل `registerCustomerAccount:3360-3368`) و فقط یک‌بار به ادمین نشان بده؛ یا از `crypto.getRandomValues` با حداقل ۱۲ کاراکتر وEnsure entropy استفاده کن. سرور نیز حداقل طول/تنوع را الزامی کند.
+---
+## ۳. P1 — یکپارچگی مالی و داده
+### FIN-01 — `notify-payment` فاکتور را «در انتظار» می‌کند اما `invoiceId` را ذخیره نمی‌کند و مسیر تأیید ندارد `[E]`
+**محل:** `server/labDbMiddleware.ts:1075-1130`؛ `server/labDbServer.ts:3181-3229` (رکورد در `:3201-3212`، `invoiceId` فقط برای تغییر وضعیت در `:3217-3223`).
+**شاهد:** `invoice status=pending_settlement`؛ رکورد `status:'pending'` **بدون `invoiceId`**؛ `balance`/`paidAmount` بدون تغییر.
+**اثر:** رکورد پرداخت برای همیشه یتیم می‌ماند؛ هیچ اندپوینت تأیید/رد ندارد؛ ادمین نمی‌تواند رکورد را به فاکتور/سند حسابداری متصل کند. تنها راه، ویرایش دستی کل مجموعهٔ `customers` از `sync-collection` است (بدون audit).
+**اصلاح:** `invoiceId` را در رکورد ذخیره کن؛ اندپوینت‌های `approve-payment`/`reject-payment` (فقط admin) با transition صریح `pending → cleared|bounced`، ساخت سند حسابداری و به‌روزرسانی `paidAmount`/`balance`/فاکتور در **یک** `withDbWrite`؛ از ثبت تکراری `(invoiceId, documentNo)` جلوگیری کن.
+### FIN-02 — `addCustomerPayment` برای پرداخت «در انتظار» هم سند درآمد و پیامک «تأیید شد» می‌سازد `[C]`
+**محل:** `src/services/ConcreteLabStorage.ts:1722-1769`؛ محاسبهٔ `totalPaid` فقط از `cleared` در `:1748-1751`؛ سند درآمد در `:1755-1766`؛ پیامک تأیید در `:1768-1769`.
+**اثر:** وضعیت رکورد `pending` است اما دفتر درآمد و پیامک می‌گویند تأیید شد؛ `paidAmount` تغییر نمی‌کند. سه منبع حقیقت ناسازگار.
+**اصلاح:** سند درآمد/پیامک/تغییر `paidAmount` فقط در transition به `cleared`؛ برای `pending` فقط اعلان «ثبت شد، در انتظار تأیید»؛ برای `bounced` هیچ درآمدی ثبت نکن؛ همهٔ محاسبات از یک تابع مشترک.
+### FIN-03 — `payInvoice` بدون idempotency، سند حسابداری تکراری و مغایرت `paidAmount` `[C]`
+**محل:** `src/services/ConcreteLabStorage.ts:1940-1986`؛ مسیر `paymentRecords.length > 0` در `:1954-1958`؛ سند درآمد در `:1963-1978`.
+**اثر:**
+- دوبار کلیک/دوبار فراخوانی → دو سند درآمد و `paidAt` جدید؛ هیچ قفل/بررسی وضعیت.
+- اگر حتی یک paymentRecord (مثلاً `pending`) وجود داشته باشد، `paidAmount` فقط از `cleared` محاسبه می‌شود؛ بنابراین «تأیید تسویه» فاکتور را `paid` می‌کند اما `paidAmount`/`balance` را تغییر نمی‌دهد.
+- سند درآمد با `description: 'پرداخت آنلاین...'` حتی برای `bank_transfer`.
+- `persistCollection` debounce؛ خطای سرور به UI برنمی‌گردد.
+**اصلاح:** این عملیات باید یک اندپوینت سرور اتمیک و idempotent باشد (`settle-invoice`): بررسی وضعیت قبلی، ساخت رکورد پرداخت `cleared`، سند حسابداری با `invoiceId`، به‌روزرسانی `paidAmount`/`balance`، و audit؛ کلید idempotency (`invoiceId + version`)؛ UI فقط پس از `200` پیام موفقیت بدهد.
+### FIN-04 — دکمهٔ «تأیید تسویه حساب» ادمین سمت کلاینت است و پیام موفقیت دروغ می‌دهد `[C]`
+**محل:** `src/components/admin/AdminDashboard.tsx:1508-1517`؛ متن `:1412-1416` ادعا می‌کند «تسویه نهایی اعمال شده و گواهینامه‌ها آزاد می‌شوند».
+**اثر:** `labDb.payInvoice` فقط state محلی را تغییر می‌دهد و `persistCollection` را با debounce صدا می‌زند؛ اگر سرور `403/409/500` بدهد، پیام سبز نمایش داده می‌شود. هیچ endpoint/audit سروری برای «تأیید تسویه» وجود ندارد؛ refresh/دستگاه دیگر ممکن است وضعیت قدیمی ببیند.
+**اصلاح:** فراخوانی اندپوینت سرور `settle-invoice`، نمایش خطا، ممنوعیت دوباره‌کلیک، و ثبت actor/زمان/مبلغ. متن UI باید از پاسخ سرور پیروی کند.
+### FIN-05 — ویرایش دستی بودجه، `paidAmount`/`balance` را از رکوردهای پرداخت جدا می‌کند `[C]`
+**محل:** `src/components/admin/AdminFinancialManagementTab.tsx:124-138` و `src/services/ConcreteLabStorage.ts:1819-1837`؛ `handleSaveBudget` مستقیماً `paidAmount`/`balance` را ست می‌کند؛ هیچ سند حسابداری/رکورد پرداخت ساخته نمی‌شود.
+**اثر:** اولین `addCustomerPayment`/`deleteCustomerPayment` بعدی، `paidAmount` را از روی `paymentRecords` بازمحاسبه و مقدار دستی را بی‌صدا پاک می‌کند؛ گزارش مالی ناپایدار.
+**اصلاح:** `paidAmount`/`balance` را **فقط مشتق‌شده** کن (derived)، نه قابل ویرایش؛ برای تعدیل، رکورد پرداخت/تعدیل با سند حسابداری بساز. اگر ویرایش دستی لازم است، آن را به یک رکورد `adjustment` با audit تبدیل کن.
+### FIN-06 — افزودن مشتری با شمارهٔ تکراری، `id` رکورد قبلی را بازنویسی می‌کند `[E]`
+**محل:** `server/labDbServer.ts:3170-3172` (`findIndex` بر اساس `id` یا `phone`؛ سپس `{...existing, ...customer}` شامل `id` جدید).
+**شاهد:**
+```text
+customers: cust-9:شرکت ۹
+```
+مشتری `cust-1` با همان شماره، پس از افزودن `cust-9`، به `cust-9` تبدیل شد. همهٔ `reports`/`invoices`/`accounting` که به `cust-1` ارجاع می‌دهند یتیم می‌شوند.
+**اصلاح:** شمارهٔ تکراری → `409` با پیام «مشتری با این شماره وجود دارد»؛ merge فقط با `id` و آن هم بدون تغییر `id`؛ `phone` را یکتا (نرمال‌شده) کن؛ در صورت نیاز به ادغام، ابزار مهاجرت با جابه‌جایی ارجاعات.
+### FIN-07 — افزودن پروفایل با `username` تکراری، `id` را بازنویسی می‌کند `[E]`
+**محل:** `server/labDbServer.ts:3305-3313`.
+**شاهد:** `profiles: usr-y:u1` — رکورد `usr-x` با username `u1` به `usr-y` تبدیل شد؛ نشست‌های `usr-x` و ارجاعات `createdBy`/`registeredBy` یتیم می‌شوند.
+**اصلاح:** `add` فقط insert؛ `username` تکراری → `409`؛ `update` فقط با `id`؛ یکتایی case-insensitive.
+---
+## ۴. P1 — هدرها، CSP و حریم خصوصی
+### SEC-01 — `frame-ancestors *` و نبود `X-Frame-Options` → Clickjacking `[E/C]`
+**محل:** `server/securityHeaders.ts:56` (`"frame-ancestors *"`)، در تضاد با کامنت `:15` که `'none'` می‌گوید؛ nginx هیچ `X-Frame-Options` ندارد.
+**اثر:** هر سایتی می‌تواند پنل مدیریت را در iframe بگذارد و روی دکمه‌های حساس (تأیید پرداخت، حذف، تغییر نقش) کلیک‌ربایی کند. CSP در production واقعاً ارسال می‌شود (در repro دیده شد).
+**اصلاح:** `frame-ancestors 'none'` (یا `'self'` اگر AI Studio نیاز دارد) + `X-Frame-Options: DENY` در nginx و Node؛ تست header در `tests/security-headers.test.cjs`.
+### SEC-02 — نقشهٔ گوگل در production بلاک می‌شود `[C]`
+**محل:** `server/securityHeaders.ts:33` (`default-src 'self'`) و نبود `frame-src`؛ iframe در `src/components/landing/LandingPage.tsx:888-897`.
+**اثر:** نقشهٔ صفحهٔ فرود در production لود نمی‌شود (در dev به‌خاطر CSP report-only شاید دیده شود).
+**اصلاح:** `frame-src 'self' https://www.google.com https://maps.google.com` (فقط همان میزبان‌های لازم)؛ یا نقشه را با لینک/تصویر استاتیک جایگزین کن.
+### SEC-03 — QR در production بلاک می‌شود و شناسه به ثالث می‌رود `[C]`
+**محل:** `server/securityHeaders.ts:52` (نبود `api.qrserver.com` در `img-src`)؛ `src/components/common/QrAccessCardModal.tsx:61` (`data=${portalAccessUrl}` شامل `username` و `customerId`).
+**اثر:** تصویر QR در production لود نمی‌شود؛ در نسخهٔ کارت، کد QR خالی می‌ماند. مستقل از CSP، ارسال شناسهٔ مشتری/نام کاربری به یک سرویس ثالث یک نشت حریم خصوصی است.
+**اصلاح:** QR را با `qrcode.react`/`qrcode` سمت کلاینت بساز (بدون شبکه) و `img-src` را فقط در صورت نیاز گسترش بده. کارت را با `canvas.toDataURL` محلی رندر کن.
+---
+## ۵. P1 — پیکربندی استقرار
+### CFG-01 — `npm start` بدون `NODE_ENV=production` سرور را در حالت dev بالا می‌آورد `[C]`
+**محل:** `package.json:12` (`node dist/server.cjs`)؛ `server.ts:118` (`if (process.env.NODE_ENV !== 'production')` → import پویا `vite`)؛ `server.ts:36-38` (`assertSessionSecretConfigured` فقط در production)؛ `server/securityHeaders.ts:21-22` (CSP report-only در dev).
+**اثر:** اگر اپراتور طبق `README` دستور `npm start` را اجرا کند (بدون PM2/`NODE_ENV`)، سرور در حالت dev اجرا می‌شود: HSTS/CSP واقعی ندارد، ممکن است Vite middleware را load کند، و در نصب `--omit=dev` با `ERR_MODULE_NOT_FOUND` کرش می‌کند. `SESSION_SECRET` هم fail-fast نمی‌شود.
+**اصلاح:** `start` را `NODE_ENV=production node dist/server.cjs` کن (یا داخل `server.ts` اگر `dist/server.cjs` وجود دارد، production فرض شود)؛ در production نبود `vite`/`SESSION_SECRET` باید خطای واضح بدهد؛ README را هم‌راستا کن.
+### CFG-02 — `README` دربارهٔ dev host و `DEV_ALLOWED_HOSTS` خلاف کد است `[C]`
+**محل:** `README.md:26` می‌گوید dev فقط `localhost` و `allowedHosts` محدود است؛ `vite.config.ts:145-146` `host: process.env.DEV_HOST || '0.0.0.0'` و `allowedHosts: true` است؛ `DEV_ALLOWED_HOSTS` هیچ‌جا خوانده نمی‌شود.
+**اثر:** dev server روی همهٔ اینترفیس‌ها باز می‌شود و همهٔ Hostها را می‌پذیرد (DNS rebinding/دسترسی LAN)؛ مستندات امنیتی گمراه‌کننده است.
+**اصلاح:** پیش‌فرض `127.0.0.1`؛ `allowedHosts` از `DEV_ALLOWED_HOSTS` بخوان و پیش‌فرض را به `['localhost','127.0.0.1']` محدود کن؛ README را تصحیح کن.
+### CFG-03 — `Dockerfile` وجود ندارد اما چند سند به آن ارجاع می‌دهد `[C]`
+**محل:** `README.md:44`، `deploy/deployment-checklist.md:10`، `.github/workflows/ci.yml:8`؛ `ls Dockerfile*` خالی؛ `ecosystem.config.cjs:4` هم `npm ci --omit=dev` سپس `npm run build` را پیشنهاد می‌کند که با نبود devDeps شکست می‌خورد.
+**اصلاح:** یا Dockerfile واقعی (multi-stage: build با devDeps، runtime فقط prod، non-root، HEALTHCHECK) بساز، یا همهٔ ارجاع‌ها را حذف کن. دستور deploy را `npm ci --include=dev && npm run build && npm prune --omit=dev` کن.
+### CFG-04 — فلگ‌های محیطی خطرناک بدون گارد production `[R/C]`
+**محل:**
+- `DISABLE_CSP=1` → `server/securityHeaders.ts:21-22` CSP را کامل خاموش می‌کند.
+- `PUBLIC_FULL_SYNC=1` → `server/labDbServer.ts:960-980` گزارش‌های approved + media + calibrations + نام پرسنل را به مهمان برمی‌گرداند.
+- `DEV_SMS_EXPOSE=1` → `server/labDbMiddleware.ts:657-658` و `:787-789` کد OTP را در پاسخ HTTP production برمی‌گرداند.
+- `DISABLE_SMS_OTP=1` → `server/labDbMiddleware.ts:640` 2FA ادمین/اپراتور را خاموش می‌کند.
+**اصلاح:** در `NODE_ENV=production` این فلگ‌ها را رد کن (fail-fast) یا فقط با `ALLOW_INSECURE_*` صریح و لاگ هشدار؛ `.env.example` را با توضیح واضح کامل کن؛ تست startup برای هر فلگ.
+---
+## ۶. P1 — آزمون‌ها و CI
+### TEST-01 — ۵ سوئیت از ۶ سوئیت، دیتابیس واقعی ریشهٔ مخزن را دستکاری می‌کنند `[E]`
+**محل:** `package.json:20`؛ فقط `tests/credential-repair.test.cjs:74` از `LAB_DATA_ROOT` موقت استفاده می‌کند؛ `grep` روی پنج سوئیت دیگر هیچ `LAB_DATA_ROOT`/`LAB_DATA_DIR` پیدا نمی‌کند؛ مثلاً `tests/security-validation.test.cjs:21-26` فقط `SESSION_SECRET` و `PORT` را ست می‌کند و باندل را مستقیم require می‌کند.
+**اثر:** اجرای `npm test` روی سرور/چک‌اوت محلی می‌تواند `data/laboratory_db.json` واقعی را بخواند/بنویسد؛ تست‌ها به هم وابسته و غیرقابل‌اعتماد می‌شوند.
+**اصلاح:** helper مشترک `tests/helpers/testEnv.cjs` که برای هر سوئیت یک `mkdtemp` بسازد و `LAB_DATA_ROOT`/`LAB_DATA_DIR`/`PORT=0` ست کند؛ `after` پاک‌سازی؛ هیچ تستی به `data/` ریشه ننویسد. در CI این را با `git diff --exit-code data` (یا نبود `data/`) گیت کن.
+### TEST-02 — هیچ تست مجوزدهی وجود ندارد (ریشهٔ فرار C1/C4) `[C/E]`
+**محل:** `tests/` (۶ فایل) هیچ تستی برای `update-profile`/`add-profile`/`customerId`/`update-role`/`refresh` ندارد؛ `smoke_test.cjs` هم در `npm test`/CI نیست.
+**اصلاح:** حداقل این فایل‌ها:
+- `tests/authorization.test.cjs` (AUTH-01..04، 11)
+- `tests/session-revocation.test.cjs` (AUTH-05..07)
+- `tests/otp.test.cjs` (OTP-01..03)
+- `tests/payment-integrity.test.cjs` (FIN-01..05)
+- `tests/data-integrity.test.cjs` (FIN-06/07، AUTH-04)
+- `tests/security-headers.test.cjs` (SEC-01..03)
+هر تست باید قبل از fix fail شود؛ خروجی fail را در PR ثبت کن.
+---
+## ۷. P2 — فهرست فشرده (همه باید رفع شوند)
+### ۷.۱ احراز هویت/نشست
+- **AUTH-09 [P2/C] افشای هش رمز در export** — `server/labDbMiddleware.ts:579-591` کل state را `JSON.stringify` می‌کند (شامل `password`). هر ادمین/توکن دزدیده‌شده کل پایگاه اعتبارنامه را می‌گیرد. اصلاح: حذف `password`/salt از خروجی + step-up auth + audit. تست: `export` هیچ کلید `password` نداشته باشد.
+- **AUTH-10 [P2/C] افشای هش در پاسخ `update-role`** — `server/labDbMiddleware.ts:848-865` مقدار `data: result.profile` را می‌فرستد؛ `server/labDbServer.ts:3969` رکورد خام (با `password`) را برمی‌گرداند. اصلاح: `sanitizeProfile(target)` و هرگز هش را در پاسخ نگذار.
+- **AUTH-12 [P2/C] نبود rate limit روی `reset-bootstrap-password`** — `server/labDbMiddleware.ts:501-559` تنها مسیر بازیابی بدون rate limit است (بقیه در `:463,603,712,765,1033,1375` دارند). اصلاح: ۵ تلاش/۱۰ دقیقه per IP + قفل موقت + لاگ.
+- **AUTH-13 [P2/C] موفقیت زودتر از نوشتن دیسک در `delete-profile`** — `server/labDbServer.ts:3981-4006` از `saveStateToDisk` (optimistic) استفاده می‌کند و `success:true` برمی‌گرداند؛ اگر نوشتن شکست بخورد، حذف در حافظه انجام شده اما پایدار نیست. اصلاح: `await saveStateToDiskAwaitable`.
+- **AUTH-14 [P2/C] نبود قفل per-account برای ورود** — `server/labDbMiddleware.ts:601-611` فقط per-IP (۱۰/۵دقیقه). password spraying توزیع‌شده را نمی‌بندد. اصلاح: شمارنده per-identifier + backoff تدریجی + هشدار.
+- **AUTH-15 [P2/C] افشای fingerprint** — `X-Powered-By` غیرفعال نیست؛ `/api/lab-data/version` و `/api/health` بدون auth نسخه/زمان آخرین تغییر را می‌دهند (`server/labDbMiddleware.ts:421-433`، `server.ts:79-85`). اصلاح: `app.disable('x-powered-by')`؛ version را پشت auth یا فقط `ETag` عمومی.
+- **AUTH-16 [P2/C] ذخیرهٔ توکن در Web Storage** — `src/services/ConcreteLabStorage.ts:126-127` (sessionStorage با fallback localStorage) و `:341-350` (refresh در localStorage). هر XSS = سرقت. اصلاح: کوکی `HttpOnly; Secure; SameSite=Strict` + CSRF token؛ یا حداقل حذف fallback و کوتاه‌کردن عمر.
+- **AUTH-17 [P2/C] توکن SSE در query string** — `server/labDbMiddleware.ts:340-370` توکن را از `?token=` می‌خواند؛ access log nginx به‌طور پیش‌فرض query را ثبت می‌کند. اصلاح: توکن کوتاه‌عمر/یک‌بارمصرف برای SSE یا کوکی HttpOnly؛ redact کردن query در لاگ. همچنین تعداد اتصال‌های SSE سقف ندارد (PERF-04).
+- **AUTH-18 [P2/C] سیاست رمز ضعیف + DoS با scryptSync** — `server/labDbServer.ts:339-356` فقط طول ≥۸ و `:387-391` فقط ۵ رمز blacklist؛ `scryptSync` روی event loop و طول رمز نامحدود (بدنه تا ۵MB). اصلاح: حداقل ۱۲ کاراکتر/تنوع، blacklist بزرگ‌تر (zxcvbn یا لیست)، سقف طول (مثلاً ۲۵۶)، و `crypto.scrypt` async/worker.
+- **AUTH-19 [P2/C] نبود whitelist نقش** — `server/labDbServer.ts:3964` هر رشته‌ای را به `role` می‌گذارد (`technician`, `root`, ...). اصلاح: فقط `admin/operator/customer`، ۴۰۰ برای بقیه.
+- **AUTH-20 [P2/C] enumeration با پسوند شماره** — `server/labDbServer.ts:3848-3854` در fallback خطی، `uPhone.endsWith(digitsOnly)`/`digitsOnly.endsWith(uPhone)` را با ۸ رقم می‌پذیرد، خلاف کامنت «هرگز suffix». اصلاح: فقط تطابق کامل شماره یا حذف fallback.
+- **AUTH-21 [P2/C] مقایسهٔ case-insensitive رمز** — `server/labDbServer.ts:3879-3882` نسخهٔ `toLowerCase()` را هم بررسی می‌کند؛ مثلاً `Password` و `password` یکی می‌شوند. اصلاح: فقط یک فرم canonical؛ case-sensitive.
+- **AUTH-22 [P2/C] گیت mustChangePassword می‌تواند دور بخورد** — `server/labDbMiddleware.ts:240-257` اگر `authUser.mustChangePassword` false باشد، اصلاً DB را نمی‌خواند؛ توکن قدیمی پس از ست‌شدن فلگ روی پروفایل، گیت را دور می‌زند. `getSessionMustChangePassword` (`labDbServer.ts:2584`) هم مرده است. اصلاح: همیشه پروفایل/رجیستری نشست را چک کن؛ یا `sessionVersion`.
+### ۷.۲ OTP/SMS
+- **OTP-06 [P2/R] `DEV_SMS_EXPOSE=1` در production کد را در HTTP برمی‌گرداند** — `server/labDbMiddleware.ts:657-658, 787-789`. اصلاح: در production رد کن.
+- **OTP-07 [P2/C] شکست provider به «simulation success» تبدیل می‌شود** — `server/smsService.ts:25-108`: اگر Kavenegar/IPPanel/Webhook خطا بدهند، به fallback می‌رسد و `{success:true, provider:'simulation'}` برمی‌گرداند؛ `login` هم نتیجه را `void` می‌کند. اصلاح: خطا را برگردان/لاگ کن؛ UI وضعیت واقعی را نشان دهد؛ retry.
+- **OTP-08 [P2/C] OTP در `smsLogs` قابل خواندن توسط همهٔ پرسنل** — `server/labDbServer.ts:923` (operator تمام `smsLogs` را می‌گیرد)؛ `ConcreteLabStorage.ts:2238+` پیام حاوی OTP را ذخیره می‌کند. اصلاح: هرگز پیام OTP را در `smsLogs` ذخیره نکن؛ یا `smsLogs` را فقط admin بده.
+- **OTP-09 [P2/C] دستور «کد را از مدیر/کنسول بگیر»** — `src/components/auth/LoginView.tsx:230-250` در production حالت manual؛ این 2FA را به دسترسی SSH/لاگ تبدیل می‌کند. اصلاح: SMTP/SMS واقعی یا حذف 2FA و مستندسازی صادقانه.
+- **OTP-10 [P2/C] OTP پنج‌رقمی و reset شمارنده در resend** — `server/labDbServer.ts:808-818` (۵ رقم)، `:873-881` (attempts/lock صفر می‌شود). اصلاح: ۶ رقم + سقف کل attempts per tempToken + عدم reset کامل.
+### ۷.۳ مالی/داده
+- **FIN-08 [P2/C] شماره فاکتور تکراری/سال ثابت** — `src/components/admin/AdminDashboard.tsx:385` (`INV-1403-` + `Math.random` ۳ رقم؛ پس از ۹۰۰ فاکتور برخورد). اصلاح: شماره سرور با sequence اتمیک/Jalali فعلی؛ یکتایی DB.
+- **FIN-09 [P2/C] اعتبارسنجی ناقص مشتری → TypeError** — `server/labDbServer.ts:3119-3160` وجود `id`/`companyName` (در برابر `name`)/`projectNames` را الزامی نمی‌کند؛ `:3445-3451` روی `customer.id.replace` و `customer.companyName` حساب می‌کند. اصلاح: schema کامل (zod یا validator دستی) + ۴۰۰.
+- **FIN-10 [P2/C] دسترسی بدون guard به `projectNames`** — `ConcreteLabStorage.ts:1763` (`cust.projectNames[0]`)، `AdminDashboard.tsx:388,398`، `OperatorNewTest.tsx:80` (`cust.projectNames.length`). مشتری بدون `projectNames` → `TypeError` و کرش جریان پرداخت/آزمون. اصلاح: `?? []` و پیام خالی.
+- **FIN-11 [P2/C] `updateCustomerFinancials` منبع حقیقت را می‌شکند** — `ConcreteLabStorage.ts:1819-1837`؛ مقادیر دستی با رکوردهای پرداخت ناسازگار. اصلاح: حذف/محدودسازی؛ فقط adjustment با سند.
+- **FIN-12 [P2/C] `sync-collection` برای customers بدون validation/حسابداری** — `server/labDbMiddleware.ts:893-940` و `server/labDbServer.ts:3520+`؛ اپراتور می‌تواند `paymentRecords` را با `cleared` دستی overwrite کند، بدون سند/پیامک. اصلاح: ممنوعیت write مستقیم مالی؛ استفاده از اندپوینت‌های دامنه‌ای + zod.
+- **FIN-13 [P2/C] مبلغ اعلامی به فاکتور گره نخورده** — `server/labDbMiddleware.ts:1097-1119` هر مبلغ مثبت را می‌پذیرد، حتی بیشتر از مانده فاکتور. اصلاح: اعتبارسنجی `amount <= invoice.balance` و `invoiceId` الزامی.
+- **FIN-14 [P2/C] وضعیت `bounced` هرگز تولید نمی‌شود** — `src/components/admin/AdminFinancialManagementTab.tsx:53` فقط `cleared|pending`؛ نوع `CustomerPaymentRecord` شامل `bounced` است. چک برگشتی در UI «در انتظار» می‌ماند. اصلاح: transition/reason + نمایش.
+- **FIN-15 [P2/C] فاکتور `paid` بدون پرداخت/سند** — `server/labDbServer.ts:3445-3451`: اگر `paidAmount` ورودی برابر کل قرارداد باشد، فاکتور `paid` ساخته می‌شود بدون `paymentRecord`/`accounting`. اصلاح: وضعیت `paid` فقط از پرداخت تأییدشده؛ ورودی `paidAmount` را نادیده بگیر.
+- **FIN-16 [P2/C] موفقیت optimistic disk در چند mutator** — `server/labDbServer.ts:2764-2779` (و `saveStateToDisk` در `addCustomer:3177`, `addDispatch`, `recordCustomerPaymentNotification:3224/3227`, `addProfileServer:3318`, `registerCustomerAccount:3475`) پیش از نوشتن دیسک `true` می‌دهد. اصلاح: برای پاسخ‌های مالی/حساس `await saveStateToDiskAwaitable`؛ حداقل خطا را به کلاینت برگردان.
+- **FIN-17 [P2/C] IDهای احتمالی-برخورد** — `server/labDbServer.ts:3202` (`pay-${Date.now()}-${Math.random()*1000}`)، `:3447` (`inv-${id.replace}`)؛ اصلاح: `uniqueServerId`/crypto.
+- **FIN-18 [P2/C] `createdBy` ثابت** — `server/labDbServer.ts:3470` (`createdBy:'usr-admin-01'`) حتی وقتی اپراتور ثبت می‌کند؛ ردپای حسابرسی نادرست. اصلاح: actor واقعی از توکن.
+### ۷.۴ داده/اعتبارسنجی
+- **DATA-01 [P2/C] تایم‌اوت ۱.۵ ثانیه‌ای `readJsonBody` بدنهٔ ناقص را `{}` می‌کند** — `server/labDbMiddleware.ts:107-150`؛ برای آپلود ۵MB روی شبکهٔ کند، handler با payload خالی اجرا می‌شود. اصلاح: تایم‌اوت متناسب/بر اساس پیشرفت، `400` صریح، عدم resolve `{}` برای POSTهای write.
+- **DATA-02 [P2/C] خطای JSON به ۵۰۰/HTML تبدیل می‌شود** — `express.json` (`server.ts:75`) و `readJsonBody` خطای parse را reject می‌کنند اما error handler JSON وجود ندارد؛ کلاینت `res.json()` می‌شکند. اصلاح: error middleware که `SyntaxError`/`413` را JSON ۴۰۰/۴۱۳ کند.
+- **DATA-03 [P2/C] تایپ‌های بد ورودی → ۵۰۰** — `server/labDbServer.ts:3770-3775` روی `identifier` غیر-string `.trim()` می‌کند؛ `update-role` نقش object را می‌پذیرد. اصلاح: type-check در مرز HTTP + ۴۰۰.
+- **DATA-04 [P2/C] نبود schema validation سراسری** — هیچ zod/joi؛ `sync`, `restore`, `add-profile`, `sync-collection` ساختار دلخواه می‌پذیرند. اصلاح: schema برای هر collection/اندپوینت + تست fuzz سبک.
+- **DATA-05 [P2/C] یکتایی در `prepareStateForSave` تضمین نمی‌شود** — `server/labDbServer.ts:2653-2675` فقط sole-admin/version را نرمال می‌کند. اصلاح: dedupe/uniqueness + خطای صریح.
+- **DATA-06 [P2/C] نبود audit trail** — تغییر نقش/رمز/پروفایل/مالی هیچ لاگ ساختاریافته‌ای ندارد؛ فقط `smsLogs` و `accounting`. اصلاح: `auditLogs` (actor, action, target, before/after, IP, time) با دسترسی admin و retention.
+- **DATA-07 [P2/C] `restore`/`sync` بدون validation** — `server/labDbServer.ts:2781+`/`:2870+` دادهٔ دلخواه را merge می‌کنند (ادمین). اصلاح: schema + dry-run + تأیید دومرحله‌ای.
+### ۷.۵ هدرها/حریم خصوصی
+- **SEC-04 [P2/C] مجوز فایل‌های حساس** — `server/labDbServer.ts:1041-1048` دایرکتوری با `mkdir` پیش‌فرض؛ `:2631-2643` نوشتن فایل بدون `mode` → معمولاً `0644`/`0755`؛ `laboratory_db.json`, `backups/*`, `active_sessions.json`, `.server_salts.json` برای کاربران دیگر VPS قابل خواندن‌اند. اصلاح: `0700` برای دایرکتوری و `0600` برای فایل‌ها؛ تست permission.
+- **SEC-05 [P2/C] PII/رمز قدیمی در سورس** — `09131703177` در `LoginView.tsx:247,296`, `Navbar.tsx:350`, `PrintContractModal.tsx:66`؛ `Ag12258` در `labDbServer.ts:384`؛ `AUDIT_PROMPT*` هم همین‌ها را تکرار می‌کنند. اصلاح: انتقال به `LAB_INFO`/env، حذف از کد/اسناد عمومی، در نظر گرفتن تاریخچه.
+- **SEC-06 [P2/C] fallback ماسک شماره، شمارهٔ واقعی را لو می‌دهد** — `server/labDbMiddleware.ts:260-263`: `'۰۹۱۳***۳۱۷۷'`. اصلاح: ماسک خنثی (`***`) بدون رقم واقعی.
+- **SEC-07 [P2/C] HSTS روی assetها** — nginx فایل‌های `/assets/` را مستقیم سرو می‌کند و `add_header Strict-Transport-Security` ندارد؛ کامنت nginx می‌گوید Node HSTS می‌دهد اما Node در مسیر asset دخیل نیست. اصلاح: HSTS در server block nginx + بازاعلان در locationهای asset.
+- **SEC-08 [P2/C] X-Frame-Options غایب** — مکمل CSP؛ برای مرورگرهای قدیمی/پراکسی‌ها. اصلاح: `X-Frame-Options: DENY`.
+### ۷.۶ فرانت‌اند/UX
+- **UI-01 [P2/C] مودال پرداخت بدون فاکتور باز می‌شود** — `src/components/customer/CustomerPortal.tsx:976-982` هیچ prop `invoice` نمی‌دهد؛ `CustomerPaymentModal.tsx:101-112` `invoice?.id` را می‌فرستد → همیشه `undefined` (ریشهٔ FIN-01). اصلاح: انتخاب فاکتور/ارسال `invoiceId` و نمایش مانده.
+- **UI-02 [P2/C] کپچای کلاینت‌محور** — `src/components/auth/LoginView.tsx:54,132` کپچا با `Math.random` تولید/بررسی می‌شود؛ سرور هیچ کپچایی نمی‌خواهد. اصلاح: حذف ادعای امنیتی یا کپچای سروری (hCaptcha/Turnstile).
+- **UI-03 [P2/C] ادعای «پرداخت» بدون درگاه** — `CustomerPaymentModal` فقط `notifyPayment` می‌کند؛ متن دکمه/پیام ممکن است پرداخت واقعی را القا کند. اصلاح: عنوان «اعلام واریز» و توضیح صریح.
+- **UI-04 [P2/C] کامپوننت‌های God** — `AdminDashboard.tsx` ۳۷۹۵ خط، `CustomerPortal.tsx` بزرگ، `ConcreteLabStorage.ts` ۲۳۳۴ خط؛ تست‌ناپذیری و ریسک رگرسیون. اصلاح: تفکیک دامنه‌ای تدریجی، بدون تغییر رفتار.
+- **UI-05 [P2/C] `ctx.roundRect` بدون fallback** — `src/components/common/QrAccessCardModal.tsx:165`؛ در مرورگر قدیمی `TypeError` و کارت دانلود نمی‌شود. اصلاح: feature-detect/fallback به `rect`.
+- **UI-06 [P2/C] پیام‌های خطای ناهمگون** — بعضی کدهای داخلی (`ROLE_CLASS_MISMATCH`, `SYNC_COLLECTION_FORBIDDEN_FOR_PROFILES`) به UI می‌رسند. اصلاح: نگاشت کد به پیام فارسی + جزئیات فقط در لاگ.
+### ۷.۷ استقرار/پیکربندی/مستندات
+- **CFG-05 [P2/C] `.env.example` ناقص** — `PUBLIC_FULL_SYNC`, `DISABLE_CSP`, `DISABLE_SMS_OTP`, `ENABLE_SMS_OTP`, `TRUSTED_PROXY_CIDRS`, `DB_BACKUP_KEEP`, `DB_BACKUP_INTERVAL_MS`, `SOLE_ADMIN_ID`, `SESSION_SECRET_FILE`, `LAB_DATA_ROOT`, `LAB_DATA_DIR`, `DEV_HOST`, `DEV_ALLOWED_HOSTS` غایب‌اند. اصلاح: کامل + توضیح خطر هرکدام.
+- **CFG-06 [P2/C] گوش‌دادن روی `0.0.0.0`** — `server.ts:66` پیش‌فرض؛ `ecosystem.config.cjs` `HOST` ندارد. پشت nginx باید `127.0.0.1` باشد تا پورت ۳۰۰۰ از بیرون قابل دسترسی نباشد. اصلاح: `HOST: '127.0.0.1'` در PM2 و پیش‌فرض امن.
+- **CFG-07 [P2/C] دو lockfile** — `bun.lock` و `package-lock.json` هر دو track شده‌اند؛ نسخه‌ها می‌توانند drift کنند. اصلاح: یکی را حذف/در CI فقط npm.
+- **CFG-08 [P2/C] `engines` ناسازگار** — `package.json:7` `>=20`، README/CI روی `<23`؛ Node 23+ ممکن است بشکند. اصلاح: `>=20 <23` یا تست روی ۲۴.
+- **CFG-09 [P2/C] `.gitignore` بدون `node_modules/`** — `.gitignore` فعلی فقط `dist/`, `data/`, `.env`, `logs/`؛ `git status` پس از نصب `?? node_modules/` می‌دهد. اصلاح: اضافه کردن `node_modules/`, `*.tsbuildinfo`, `.DS_Store`.
+- **CFG-10 [P2/C] سخت‌سازی nginx** — `listen 443 ssl http2` منسوخ (`deploy/nginx-azmajahanbin.conf:36`)، `server_tokens`/`ssl_protocols`/`limit_req`/`X-Frame-Options` ندارد. اصلاح: `listen 443 ssl; http2 on;`، TLS 1.2/1.3، `server_tokens off`, `limit_req`, HSTS/XFO.
+- **CFG-11 [P2/C] نبود log rotation/monitoring** — PM2 `logs/` بدون rotate؛ `max_memory_restart 1G`؛ هیچ healthcheck/alert. اصلاح: `pm2-logrotate`، healthcheck، هشدار disk/memory، backup restore drill.
+- **CFG-12 [P2/C] دستور deploy ناسازگار** — `ecosystem.config.cjs:4` `npm ci --omit=dev` سپس `npm run build` (نیازمند vite/esbuild)؛ اصلاح: build با devDeps سپس prune.
+- **CFG-13 [P2/C] کامنت HSTS گمراه‌کننده** — `deploy/nginx-azmajahanbin.conf:48-50` می‌گوید HSTS در nginx است ولی `add_header` ندارد؛ یا اضافه کن یا کامنت را تصحیح کن.
+### ۷.۸ تست/کیفیت
+- **TEST-03 [P2/C] نبود تست فرانت/e2e** — هیچ تستی برای `update-profile` UI، پرداخت، QR، نقشه نیست. اصلاح: Playwright برای مسیرهای بحرانی (login، پرداخت، تأیید ادمین).
+- **TEST-04 [P2/C] `smoke_test.cjs` در CI/`npm test` نیست** — `package.json:20`؛ اصلاح: اجرا در job جدا با `LAB_DATA_DIR` موقت.
+- **TEST-05 [P2/C] CI بدون `npm audit`/SAST** — `.github/workflows/ci.yml:47-62`؛ اصلاح: `npm audit --omit=dev --audit-level=high` + CodeQL/ESLint security.
+- **TEST-06 [P2/C] نبود ESLint/Prettier check** — `package.json` فقط `tsc`; `.prettierrc.json` بدون اجرا در CI. اصلاح: ESLint + `format:check`.
+- **TEST-07 [P2/C] کلاینت `strict` نیست** — `tsconfig.json:5-22` `strict` ندارد (سرور دارد)؛ منشأ `any` و باگ‌های undefined. اصلاح: `strict: true` تدریجی + `noUncheckedIndexedAccess`.
+- **TEST-08 [P2/C] نبود coverage** — هیچ threshold؛ اصلاح: c8/istanbul برای server و حداقل ۷۰٪ برای مسیرهای auth/payment.
+### ۷.۹ عملکرد/مقیاس
+- **PERF-01 [P2/C] three.js در بارگذاری اول** — `src/App.tsx:6` `LandingPage` را static ایمپورت می‌کند و `LandingPage.tsx:6-8` سه ویج three را؛ chunk `three-*.js` ≈ ۵۲۲KB و `index-*.js` ≈ ۵۵۶KB. اصلاح: lazy-load `LandingPage`/ویج‌ها در `React.lazy`+`Suspense`، preload هوشمند.
+- **PERF-02 [P2/C] تصاویر سنگین** — `src/assets/images` ≈ ۵.۶MB، هر فایل ۷۰۰–۸۵۵KB؛ اصلاح: WebP/AVIF، resize، `loading="lazy"`, srcset.
+- **PERF-03 [P2/C] JSON DB با base64 و serialize کامل در هر write** — `server/labDbServer.ts:2631-2643`, `:2690-2708`; رشد O(n) و ریسک OOM/restart. اصلاح: SQLite/Postgres + فایل‌استوریج (S3/دیسک) و ارجاع در DB.
+- **PERF-04 [P2/C] SSE بدون سقف اتصال** — `server/labDbServer.ts:1785-1815` `Set<SseClient>` بی‌حد؛ یک توکن معتبر می‌تواند هزاران اتصال باز کند. اصلاح: سقف per-user/IP + heartbeat + timeout + متریک.
+- **PERF-05 [P2/C] پشتیبان‌گیری کامل هر ۵ دقیقه** — `server/labDbServer.ts:2330-2405` کپی کامل DB (با media) و ۴۸ نسخه؛ اصلاح: incremental/WAL، فشرده‌سازی، off-site.
+- **PERF-06 [P2/C] export/backups بدون pagination** — `server/labDbMiddleware.ts:579-591`, `:478-492`؛ اصلاح: streaming/zip و محدودیت اندازه.
+---
+## ۸. P3 — بهبودهای کم‌ریسک
+- **P3-01** `dist/server.cjs.map` در artifact build تولید می‌شود (با `--sourcemap` در `package.json:11`)؛ در runtime با prefix `/server.cjs` بلاک می‌شود (تست شد: `404`) و نشت عمومی نیست، اما سورس در artifact است؛ برای production `--sourcemap=external` را حذف یا map را از artifact پاک کن.
+- **P3-02** `metadata.json` و `AUDIT_PROMPT*` ادعاهای قدیمی/داده‌های حساس دارند؛ اسناد عمومی را بازنویسی/حذف کن.
+- **P3-03** لاگ `console.warn` برای CORS ردشده در production می‌تواند لاگ را پر کند؛ rate-limit/sample.
+- **P3-04** پیام‌های فارسی/انگلیسی ناهمگون؛ یک فرهنگ لغت خطا.
+- **P3-05** `Auth-22`/`getSessionMustChangePassword` کد مرده؛ حذف یا استفاده.
+- **P3-06** `LoginView` fallback phone hard-coded؛ به `LAB_INFO` منتقل شود.
+- **P3-07** `AdminDashboard`/`CustomerPortal` بزرگ؛ تفکیک تدریجی.
+- **P3-08** `server_tokens off` و حذف `X-Powered-By` (اگر در AUTH-15 انجام نشد).
+---
+## ۹. مواردی که **باگ نیستند** (تکرار نکن)
+این‌ها در ممیزی‌های قبلی مطرح شده‌اند اما در snapshot فعلی رفع/تأیید شده‌اند؛ دوباره گزارش نکن:
+- **CORS باز:** اکنون fail-closed است؛ `ALLOWED_ORIGINS` خالی در production cross-origin را رد می‌کند (`server/labDbMiddleware.ts:290-310`). (فقط برای فرانت cross-origin باید مقدار بگیرد.)
+- **نبود CSP/HSTS:** وجود دارد (`server/securityHeaders.ts:68-90`)، هرچند `frame-ancestors` خراب است.
+- **Gemini بدون auth/rate limit:** `server/geminiApi.ts:59` گارد دارد و dev/prod مشترک است (`vite.config.ts:9-16`).
+- **داده‌های `data/` در Git:** `git ls-files data` خالی است؛ `.gitignore` شامل `data/` است و تاریخچهٔ فعلی فقط یک commit دارد.
+- **source map عمومی:** `/server.cjs.map` در runtime `404` می‌دهد (تست شد)؛ فقط artifact است (P3-01).
+- **`localStorage.clear()` در constructor:** حذف شده؛ فقط کامنت توضیحی مانده (`ConcreteLabStorage.ts:118-126`).
+- **IDهای `Date.now().slice(-4)`:** در مسیرهای اصلی با `uniqueId`/`uniqueServerId` جایگزین شده‌اند (استثناهای باقی‌مانده در FIN-17).
+- **rate-limit قابل‌جعل با XFF:** از `proxy-addr` و `TRUST_PROXY` استفاده می‌شود (`server/rateLimit.ts:35-60`).
+- **ناهماهنگی body size:** nginx و Express هر دو ۵MB (`deploy/nginx-azmajahanbin.conf:61`، `server.ts:75`).
+- **نبود CI:** CI وجود دارد (`npm ci → lint → build → test` + `nginx -t`)؛ ایرادهای پوشش در TEST پابرجاست.
+- **گیت mustChangePassword فقط کلاینتی:** یک middleware سروری وجود دارد (`server/labDbMiddleware.ts:233-238,329-341`)؛ ایراد AUTH-22 (short-circuit) جداگانه است.
+- **`X-Powered-By`/version:** هنوز باگ است (AUTH-15) — این را به‌عنوان «رفع‌شده» فرض نکن.
+- **PII/رمز قدیمی:** هنوز در سورس است (SEC-05) — برخلاف ادعای برخی اسناد، فقط بخشی از تاریخچه پاک شده است.
+- **`npm audit` صفر:** در زمان snapshot؛ پس از افزودن dependency جدید دوباره اجرا کن.
+---
+## ۱۰. نقشهٔ اجرا (PRها)
+| PR | دامنه | موارد | گیت |
+|---|---|---|---|
+| PR-1 | قفل مجوزدهی | AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-11 | تست‌های authz + reproهای P0 |
+| PR-2 | نشست/اعتبارنامه | AUTH-05, AUTH-06, AUTH-07, AUTH-08, AUTH-09, AUTH-10 | session-revocation + login tests |
+| PR-3 | OTP/SMS | OTP-01..10 | otp tests + mock provider |
+| PR-4 | مالی | FIN-01..18 | payment-integrity + migration |
+| PR-5 | هدر/حریم خصوصی | SEC-01..08 | header tests |
+| PR-6 | داده/اعتبارسنجی | DATA-01..07 | schema/fuzz tests |
+| PR-7 | استقرار/مستندات | CFG-01..13 | startup smoke + docs |
+| PR-8 | آزمون/CI | TEST-01..08 | CI green + coverage |
+| PR-9 | عملکرد | PERF-01..06 | bundle size/latency |
+**وابستگی‌ها:**
+- AUTH-01/02/03/04 باید **قبل از** هر تغییر UI/refactor انجام شوند؛ در غیر این صورت ریسک رگرسیون.
+- AUTH-06/07 به طراحی `sessionVersion`/refresh registry وابسته‌اند؛ ابتدا طراحی کوتاه بنویس.
+- FIN-01/02/03/04 باید با هم و پس از AUTH-04 (نقش/مالکیت) انجام شوند.
+- TEST-01 قبل از افزودن تست‌های جدید (برای ایزوله‌سازی) و TEST-02 همراه PR-1.
+**معیار پذیرش نهایی هر PR:**
+- [ ] تست جدید قبل از fix fail شده و بعد pass شده (شواهد در PR).
+- [ ] `npm run lint`, `npm run build`, `npm test` سبز.
+- [ ] هیچ داده/سکرت جدید commit نشده.
+- [ ] مستندات/`.env.example` به‌روز شده‌اند.
+- [ ] برای تغییرات امنیتی، تست منفی (دسترسی غیرمجاز) وجود دارد.
+- [ ] هیچ محدودیت امنیتی برای سبز شدن تست شل نشده است.
+---
+## ۱۱. نمونهٔ تست regression برای PR-1
+```js
+// tests/authorization.test.cjs — الگو؛ جزئیات را با helper ایزوله کامل کن
+const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawn, spawnSync } = require('child_process');
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'authz-'));
+const bundle = path.resolve(__dirname, '..', 'dist', 'server.cjs');
+const secret = 'q'.repeat(48);
+// seed با __testables و LAB_DATA_DIR=root (نه data/ ریشه)
+spawnSync('node', ['-e', `
+  (async () => {
+    const db = require(${JSON.stringify(bundle)}).__testables;
+    await db.loadDatabaseStateAsync();
+    db.addCustomer({ id:'cust-1', companyName:'c1', representativeName:'r', phone:'09121234561',
+      projectNames:['p'], totalContractAmount:1000, paidAmount:0, balance:1000,
+      paymentRecords:[], createdAt:new Date().toISOString() });
+    db.addProfileServer({ id:'usr-cust-1', username:'cust1', fullName:'c1', role:'customer',
+      customerId:'cust-1', phone:'09121234561', status:'active', password:'CustPass#2026',
+      email:'c1@example.com' });
+    await new Promise(r => setTimeout(r, 700));
+    process.exit(0);
+  })();
+`], { env: { ...process.env, NODE_ENV: 'production', SESSION_SECRET: secret,
+  LAB_DATA_DIR: root, ADMIN_INITIAL_PASSWORD: 'AdminPass#2026', PORT: '0' } });
+// start server with PORT=0 or a free port, login customer, then:
+// 1) POST update-profile {id:self, username:'admin'} → 403/400
+// 2) admin record unchanged (read DB file / __testables)
+// 3) POST update-profile {id:self, customerId:'cust-2'} → 400
+// 4) POST refresh → token.customerId === 'cust-1'
+// 5) operator add-profile {username:'admin'} → 403 (PR-1)
+```
+> از helper مشترک `tests/helpers/testEnv.cjs` استفاده کن؛ پورت آزاد را با `PORT=0` و خواندن آدرس listener بگیر.
+---
+## ۱۲. پیوست: شواهد و اسکریپت‌های بازتولید
+اسکریپت‌ها در `/home/user/security-review/` (خارج از مخزن) و روی `dist/server.cjs` با `LAB_DATA_DIR` موقت اجرا شدند. خروجی خلاصه:
+| اسکریپت | یافته | خروجی کلیدی |
+|---|---|---|
+| `repro-takeover-admin.cjs` | AUTH-01 | `update-profile targeting admin: 200`، `admin login with attacker password: 200`، `admin-only add-profile: 200` |
+| `repro-op-admin.cjs` | AUTH-02 | `operator add-profile targeting admin: 200`، `admin login ... 200` |
+| `repro-idor.cjs` | AUTH-03 | `token customerId = cust-2`، `victim reports readable: ['SECRET-REPORT-2']` |
+| `repro-takeover.cjs` / `check-dup4.cjs` | AUTH-04 | دو رکورد `usr-cust-1`، نبود `usr-cust-2` با شناسهٔ خودش |
+| `repro-pw.cjs` | AUTH-05 | `update-profile ... 200` / `update-password ... 400` |
+| `repro-status.cjs` | AUTH-06 | کاربر inactive وارد می‌شود؛ توکن تنزل‌یافته `add-profile: 200` |
+| `repro-refresh.cjs` | AUTH-07 | `refresh with OTHER session refresh token after logout: 200` |
+| `repro.cjs` | AUTH-08/OTP-01 | `session` بدون auth، OTP در لاگ، resend کد قبلی را باطل می‌کند |
+| `repro-pay.cjs` | FIN-01 | `pending_settlement` + رکورد بدون `invoiceId` |
+| `check-merge.cjs` | FIN-06/07 | `customers: cust-9:...`، `profiles: usr-y:u1` |
+**نکته:** این اسکریپت‌ها رفتار مخرب را عمداً بازتولید می‌کنند؛ فقط روی محیط آزمایشی با `LAB_DATA_DIR` موقت اجرا شوند. برای CI آن‌ها را به `tests/` منتقل و پورت را تصادفی/`0` کن.
+---
+## ۱۳. محدودیت‌های این رجیستر
+- مرور ایستا روی تمام ۴۰۰۰+ خط `labDbServer.ts` و ۳۷۹۵ خط `AdminDashboard.tsx` خط‌به‌خط انجام نشده؛ تمرکز روی مسیرهای احراز هویت/مالی/داده بوده است.
+- تست نفوذ شبکه‌ای/فازی/بار انجام نشده؛ XSS ذخیره‌شده در همهٔ فیلدهای آزاد به‌صورت سیستماتیک بررسی نشده است.
+- `npm audit` در زمان snapshot صفر بود؛ این تضمین آینده نیست.
+- شماره‌خط‌ها با تغییر کد جابه‌جا می‌شوند؛ از نام تابع/ثابت استفاده کن.
