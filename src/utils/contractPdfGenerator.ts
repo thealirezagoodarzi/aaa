@@ -78,24 +78,39 @@ export async function downloadContractPdf(
 
       const sec = targets[i];
       const canvas = await html2canvas(sec, {
-        scale: 1.5,
+        scale: 2.0,
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
         onclone: (clonedDoc: Document) => {
-          // Sanitize modern Tailwind v4 oklch colors so html2canvas color parser does not throw
+          // Force light mode so dark mode colors never hide or distort contract text
           try {
+            clonedDoc.documentElement.classList.remove('dark');
+            clonedDoc.body.classList.remove('dark');
+            clonedDoc.documentElement.setAttribute('data-theme', 'light');
+
             const styles = clonedDoc.querySelectorAll('style');
             styles.forEach(st => {
               if (st.textContent && st.textContent.includes('oklch')) {
                 st.textContent = st.textContent.replace(/oklch\([^)]+\)/g, '#1e293b');
               }
             });
+
             const pages = clonedDoc.querySelectorAll<HTMLElement>('.contract-page, .certificate-page');
             pages.forEach(p => {
               p.style.backgroundColor = '#ffffff';
-              p.style.color = '#0f172a';
+              p.style.color = '#000000';
               p.style.boxShadow = 'none';
+              p.style.borderColor = '#000000';
+            });
+
+            // Ensure all text elements inside pages have explicit solid black color
+            const allText = clonedDoc.querySelectorAll<HTMLElement>('.contract-page *, .certificate-page *');
+            allText.forEach(t => {
+              if (t.style) {
+                t.style.color = '#000000';
+                t.style.textShadow = 'none';
+              }
             });
           } catch (e) {
             console.warn('[PDF] Stylesheet sanitization warning:', e);
@@ -103,7 +118,7 @@ export async function downloadContractPdf(
         }
       });
 
-      const imgData = canvas.toDataURL('image/jpeg', 0.92);
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
       pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
     }
 

@@ -33,7 +33,10 @@ export interface ContractExportData {
   isBlankTemplate?: boolean;
 }
 
-export async function generateAndDownloadContractDocx(data: ContractExportData, filename: string = 'gharardad-azmabeton.docx') {
+export async function generateAndDownloadContractDocx(
+  data: ContractExportData,
+  filename: string = 'gharardad-azmabeton.docx'
+) {
   const isBlank = !!data.isBlankTemplate;
 
   const renderVal = (val: string | undefined | null, defaultDots: string = '...............................................') => {
@@ -82,18 +85,18 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
   const labAddress = data.labAddress || 'شهرکرد، بلوار آیت الله کاشانی، انتهای کوچه ۳۰';
   const labPhone = data.labPhone || '۰۹۱۳۱۷۰۳۱۷۷';
 
-  // Strict font specification for Complex Script (Persian) in Microsoft Word
+  // Cross-platform font fallback: 'B Nazanin' as complex script with 'Tahoma' / 'Arial' fallback
   const FONT_SPEC = {
     name: 'B Nazanin',
-    ascii: 'B Nazanin',
-    hAnsi: 'B Nazanin',
-    cs: 'B Nazanin'
+    cs: 'B Nazanin',
+    ascii: 'Tahoma',
+    hAnsi: 'Tahoma'
   };
 
   const pProps = (
     alignment: (typeof AlignmentType)[keyof typeof AlignmentType] = AlignmentType.JUSTIFIED, 
-    spacingBefore = 30, 
-    spacingAfter = 30, 
+    spacingBefore = 15, 
+    spacingAfter = 15, 
     keepLines = true
   ) => ({
     bidirectional: true,
@@ -101,7 +104,7 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
     spacing: {
       before: spacingBefore,
       after: spacingAfter,
-      line: 270 // Exactly calibrated for strict 2-page fit
+      line: 285 // calibrated for exact 2-page fit in Word
     },
     keepLines,
     keepNext: alignment === AlignmentType.RIGHT
@@ -110,16 +113,16 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
   const runProps = (text: string, bold = false, size = 20) => new TextRun({
     text,
     font: FONT_SPEC,
-    size, // 20 = 10pt, 22 = 11pt, 24 = 12pt
+    size, // 20 = 10pt, 21 = 10.5pt, 22 = 11pt, 24 = 12pt
     bold,
     rightToLeft: true
   });
 
   const cellBorder = {
-    top: { style: BorderStyle.SINGLE, size: 6, color: '222222' },
-    bottom: { style: BorderStyle.SINGLE, size: 6, color: '222222' },
-    left: { style: BorderStyle.SINGLE, size: 6, color: '222222' },
-    right: { style: BorderStyle.SINGLE, size: 6, color: '222222' }
+    top: { style: BorderStyle.SINGLE, size: 6, color: '333333' },
+    bottom: { style: BorderStyle.SINGLE, size: 6, color: '333333' },
+    left: { style: BorderStyle.SINGLE, size: 6, color: '333333' },
+    right: { style: BorderStyle.SINGLE, size: 6, color: '333333' }
   };
 
   // Build Project Specifications Table (2 Columns, 4 Rows)
@@ -133,7 +136,7 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
           new TableCell({
             width: { size: 50, type: WidthType.PERCENTAGE },
             borders: cellBorder,
-            margins: { top: 60, bottom: 60, left: 100, right: 100 },
+            margins: { top: 50, bottom: 50, left: 80, right: 80 },
             children: [
               new Paragraph({
                 bidirectional: true,
@@ -149,7 +152,7 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
           new TableCell({
             width: { size: 50, type: WidthType.PERCENTAGE },
             borders: cellBorder,
-            margins: { top: 60, bottom: 60, left: 100, right: 100 },
+            margins: { top: 50, bottom: 50, left: 80, right: 80 },
             children: [
               new Paragraph({
                 bidirectional: true,
@@ -169,7 +172,7 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
           new TableCell({
             width: { size: 50, type: WidthType.PERCENTAGE },
             borders: cellBorder,
-            margins: { top: 60, bottom: 60, left: 100, right: 100 },
+            margins: { top: 50, bottom: 50, left: 80, right: 80 },
             children: [
               new Paragraph({
                 bidirectional: true,
@@ -185,7 +188,7 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
           new TableCell({
             width: { size: 50, type: WidthType.PERCENTAGE },
             borders: cellBorder,
-            margins: { top: 60, bottom: 60, left: 100, right: 100 },
+            margins: { top: 50, bottom: 50, left: 80, right: 80 },
             children: [
               new Paragraph({
                 bidirectional: true,
@@ -205,7 +208,7 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
           new TableCell({
             width: { size: 50, type: WidthType.PERCENTAGE },
             borders: cellBorder,
-            margins: { top: 60, bottom: 60, left: 100, right: 100 },
+            margins: { top: 50, bottom: 50, left: 80, right: 80 },
             children: [
               new Paragraph({
                 bidirectional: true,
@@ -221,7 +224,7 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
           new TableCell({
             width: { size: 50, type: WidthType.PERCENTAGE },
             borders: cellBorder,
-            margins: { top: 60, bottom: 60, left: 100, right: 100 },
+            margins: { top: 50, bottom: 50, left: 80, right: 80 },
             children: [
               new Paragraph({
                 bidirectional: true,
@@ -242,7 +245,7 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
             columnSpan: 2,
             width: { size: 100, type: WidthType.PERCENTAGE },
             borders: cellBorder,
-            margins: { top: 60, bottom: 60, left: 100, right: 100 },
+            margins: { top: 50, bottom: 50, left: 80, right: 80 },
             children: [
               new Paragraph({
                 bidirectional: true,
@@ -280,20 +283,20 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
               new Paragraph({
                 bidirectional: true,
                 alignment: AlignmentType.CENTER,
-                spacing: { before: 40, after: 20 },
+                spacing: { before: 20, after: 10 },
                 children: [runProps('نام و نام خانوادگی کارفرما / نماینده کارفرما', true, 20)]
               }),
               new Paragraph({
                 bidirectional: true,
                 alignment: AlignmentType.CENTER,
-                spacing: { before: 10, after: 20 },
+                spacing: { before: 5, after: 10 },
                 children: [runProps(employer !== '...............................................' ? employer : '.....................................', false, 19)]
               }),
               new Paragraph({
                 bidirectional: true,
                 alignment: AlignmentType.CENTER,
-                spacing: { before: 150, after: 40 },
-                children: [runProps('محل امضا و اثر انگشت', false, 18)]
+                spacing: { before: 80, after: 20 },
+                children: [runProps('(محل امضا و اثر انگشت)', false, 17)]
               })
             ]
           }),
@@ -309,20 +312,20 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
               new Paragraph({
                 bidirectional: true,
                 alignment: AlignmentType.CENTER,
-                spacing: { before: 40, after: 20 },
+                spacing: { before: 20, after: 10 },
                 children: [runProps('نام و نام خانوادگی نماینده آزمایشگاه', true, 20)]
               }),
               new Paragraph({
                 bidirectional: true,
                 alignment: AlignmentType.CENTER,
-                spacing: { before: 10, after: 20 },
+                spacing: { before: 5, after: 10 },
                 children: [runProps('شرکت آزما بتن پایش خاک و پی جهان بین', false, 19)]
               }),
               new Paragraph({
                 bidirectional: true,
                 alignment: AlignmentType.CENTER,
-                spacing: { before: 150, after: 40 },
-                children: [runProps('محل مهر و امضای آزمایشگاه', false, 18)]
+                spacing: { before: 80, after: 20 },
+                children: [runProps('(محل امضا و مهر رسمی شرکت)', false, 17)]
               })
             ]
           })
@@ -335,17 +338,17 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
   const page1Children = [
     // Header
     new Paragraph({
-      ...pProps(AlignmentType.CENTER, 0, 40),
+      ...pProps(AlignmentType.CENTER, 0, 20),
       children: [runProps('به نام خدا', true, 24)]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.CENTER, 20, 80),
-      children: [runProps('قرارداد ارائه خدمات آزمایشگاهی، نمونه برداری، تعیین مقاومت فشاری و مشخصات بتن', true, 22)]
+      ...pProps(AlignmentType.CENTER, 10, 40),
+      children: [runProps('قرارداد ارائه خدمات آزمایشگاهی، نمونه برداری، تعیین مقاومت فشاری و مشخصات بتن', true, 21)]
     }),
 
     // Preamble
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 30, 50),
+      ...pProps(AlignmentType.JUSTIFIED, 15, 25),
       children: [
         runProps('این قرارداد فی مابین آقای/ خانم/ شرکت '),
         runProps(employer, true),
@@ -367,11 +370,11 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
 
     // Article 1
     new Paragraph({
-      ...pProps(AlignmentType.RIGHT, 40, 20),
-      children: [runProps('ماده ۱- موضوع قرارداد', true, 21)]
+      ...pProps(AlignmentType.RIGHT, 20, 10),
+      children: [runProps('ماده ۱- موضوع قرارداد', true, 20)]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 15, 30),
+      ...pProps(AlignmentType.JUSTIFIED, 10, 15),
       children: [
         runProps('عبارت است از انجام و ثبت آزمایش های کنترل کیفیت بتن به صورت نمونه برداری از بتن تازه و تعیین مقاومت فشاری و تهیه گزارش مربوطه به پروژه با مشخصات زیر:')
       ]
@@ -381,25 +384,25 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
 
     // Article 2
     new Paragraph({
-      ...pProps(AlignmentType.RIGHT, 40, 20),
-      children: [runProps('ماده ۲- شرح خدمات آزمایشگاه', true, 21)]
+      ...pProps(AlignmentType.RIGHT, 20, 10),
+      children: [runProps('ماده ۲- شرح خدمات آزمایشگاه', true, 20)]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 15, 15),
+      ...pProps(AlignmentType.JUSTIFIED, 10, 10),
       children: [
         runProps('۱-۲ ', true),
         runProps('تواتر نمونه برداری از بتن تازه مطابق با مبحث نهم مقررات ملی ساختمان، آیین نامه بتن ایران و دستورالعمل ها و الزامات سازمان نظام مهندسی استان چهارمحال و بختیاری صورت می گیرد.')
       ]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 15, 15),
+      ...pProps(AlignmentType.JUSTIFIED, 10, 10),
       children: [
         runProps('۲-۲ ', true),
         runProps('نگهداری، عمل آوری و ارائه نتایج آزمون مقاومت های فشاری ۷ و ۲۸ روزه و نگهداری نمونه شاهد به مدت ۹۰ روز در محل آزمایشگاه.')
       ]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 15, 30),
+      ...pProps(AlignmentType.JUSTIFIED, 10, 15),
       children: [
         runProps('۳-۲ ', true),
         runProps('انجام عملیات و آزمایش های مخرب و غیر مخرب اعم از چکش اشمیت و مغزه گیری در پروژه (هزینه این قسمت جداگانه محاسبه می گردد.)')
@@ -408,11 +411,11 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
 
     // Article 3
     new Paragraph({
-      ...pProps(AlignmentType.RIGHT, 40, 20),
-      children: [runProps('ماده ۳- مدت زمان قرارداد', true, 21)]
+      ...pProps(AlignmentType.RIGHT, 20, 10),
+      children: [runProps('ماده ۳- مدت زمان قرارداد', true, 20)]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 15, 30),
+      ...pProps(AlignmentType.JUSTIFIED, 10, 15),
       children: [
         runProps('ارائه خدمات موضوع قرارداد از تاریخ عقد و به مدت ۲۴ ماه می باشد. پس از پایان این مدت با توجه به پیشرفت فیزیکی پروژه مذکور، قرارداد به احتساب نرخ مصوب جدید و پرداخت مابه التفاوت توسط صاحبکار قابل تمدید خواهد بود.')
       ]
@@ -420,18 +423,18 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
 
     // Article 4
     new Paragraph({
-      ...pProps(AlignmentType.RIGHT, 40, 20),
-      children: [runProps('ماده ۴- مبلغ و نحوه پرداخت قرارداد', true, 21)]
+      ...pProps(AlignmentType.RIGHT, 20, 10),
+      children: [runProps('ماده ۴- مبلغ و نحوه پرداخت قرارداد', true, 20)]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 15, 15),
+      ...pProps(AlignmentType.JUSTIFIED, 10, 10),
       children: [
         runProps('۱-۴ ', true),
         runProps('حق الزحمه ارائه خدمات آزمایشگاهی بر مبنای نرخ مصوب سازمان نظام مهندسی استان و با توجه به زیربنا و تعداد طبقات ساختمان و با احتساب ۱۰ درصد مالیات بر ارزش افزوده محاسبه و تعیین می گردد.')
       ]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.RIGHT, 15, 15),
+      ...pProps(AlignmentType.RIGHT, 10, 10),
       children: [
         runProps('الف: ', true),
         runProps('تعداد مورد نیاز آزمایش '),
@@ -440,7 +443,7 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
       ]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 15, 20),
+      ...pProps(AlignmentType.JUSTIFIED, 10, 10),
       children: [
         runProps('ب: ', true),
         runProps('مبلغ حق الزحمه به ازای هر سری آزمایش '),
@@ -451,60 +454,64 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
       ]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 15, 30),
+      ...pProps(AlignmentType.JUSTIFIED, 10, 20),
       children: [
         runProps('تبصره ۱: ', true),
         runProps('در صورت اعمال اضافه بنا و تغییر دفعات بتن ریزی و افزایش تعداد سری نمونه گیری، حق الزحمه نمونه های مازاد بر اساس نرخ مصوب ملاک عمل خدمات فنی و آزمایشگاهی محاسبه می گردد و مالک موظف به پرداخت آن خواهد بود.')
-      ]
-    }),
-
-    // Article 5 Item 1-5 (Bottom of Page 1)
-    new Paragraph({
-      ...pProps(AlignmentType.RIGHT, 40, 20),
-      children: [runProps('ماده ۵- تعهدات شرکت', true, 21)]
-    }),
-    new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 15, 20),
-      children: [
-        runProps('۱-۵ ', true),
-        runProps('حضور تکنسین با تجهیزات لازم در زمان بتن ریزی و انجام عملیات نمونه گیری.')
       ]
     })
   ];
 
   // Section 2: Page 2
   const page2Children = [
-    // Continuation of Article 5
+    // Header for Page 2
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 25, 15),
+      ...pProps(AlignmentType.CENTER, 0, 15),
+      children: [runProps('به نام خدا - ادامه قرارداد ارائه خدمات آزمایشگاهی بتن', true, 19)]
+    }),
+
+    // Article 5: تعهدات شرکت
+    new Paragraph({
+      ...pProps(AlignmentType.RIGHT, 15, 10),
+      children: [runProps('ماده ۵- تعهدات شرکت', true, 20)]
+    }),
+    new Paragraph({
+      ...pProps(AlignmentType.JUSTIFIED, 10, 10),
+      children: [
+        runProps('۱-۵ ', true),
+        runProps('حضور تکنسین با تجهیزات لازم در زمان بتن ریزی و انجام عملیات نمونه گیری.')
+      ]
+    }),
+    new Paragraph({
+      ...pProps(AlignmentType.JUSTIFIED, 10, 10),
       children: [
         runProps('۲-۵ ', true),
         runProps('زمان و محل نمونه گیری توسط مهندس ناظر سازه و در صورت عدم حضور ایشان، توسط آزمایشگاه تعیین می گردد.')
       ]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 15, 15),
+      ...pProps(AlignmentType.JUSTIFIED, 10, 10),
       children: [
         runProps('۳-۵ ', true),
         runProps('نمونه گیری مطابق دستورالعمل های سازمان نظام مهندسی و استانداردهای معتبر، انجام آزمایش اسلامپ، حمل آزمونه ها به محل آزمایشگاه، نگهداری و عمل آوری نمونه ها در شرایط استاندارد، انجام آزمایش های مورد نیاز مطابق با استاندارد و ارائه گزارش نتایج آزمایش.')
       ]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 15, 15),
+      ...pProps(AlignmentType.JUSTIFIED, 10, 10),
       children: [
         runProps('۴-۵ ', true),
         runProps('نتایج آزمایش ها در دو نوبت در سن ۷ و ۲۸ روزه یا مطابق با دستور کتبی ناظر سازه تهیه و ارائه می گردد.')
       ]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 15, 15),
+      ...pProps(AlignmentType.JUSTIFIED, 10, 10),
       children: [
         runProps('۵-۵ ', true),
         runProps('حداقل یک نمونه شاهد تا ۹۰ روز در آزمایشگاه نگهداری می گردد و بنا به دستور کتبی مهندس ناظر مورد آزمایش قرار خواهد گرفت.')
       ]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 15, 30),
+      ...pProps(AlignmentType.JUSTIFIED, 10, 15),
       children: [
         runProps('۶-۵ ', true),
         runProps('در صورت اطلاع رسانی به موقع توسط کارفرما و عدم مراجعه آزمایشگاه، هزینه آزمایشات جایگزین اعم از مخرب و غیرمخرب به عهده آزمایشگاه می باشد.')
@@ -513,39 +520,39 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
 
     // Article 6: تعهدات کارفرما
     new Paragraph({
-      ...pProps(AlignmentType.RIGHT, 40, 20),
-      children: [runProps('ماده ۶- تعهدات کارفرما', true, 21)]
+      ...pProps(AlignmentType.RIGHT, 15, 10),
+      children: [runProps('ماده ۶- تعهدات کارفرما', true, 20)]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 15, 15),
+      ...pProps(AlignmentType.JUSTIFIED, 10, 10),
       children: [
         runProps('۱-۶ ', true),
         runProps('کارفرما موظف است حداقل ۴۸ ساعت قبل از بتن ریزی و همچنین یک ساعت قبل از ورود اولین میکسر، مراتب را به آزمایشگاه اطلاع رسانی کند.')
       ]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 15, 15),
+      ...pProps(AlignmentType.JUSTIFIED, 10, 10),
       children: [
         runProps('۲-۶ ', true),
         runProps('کارفرما موظف است با هماهنگی ناظر و مجری پروژه، شرایط لازم جهت نمونه گیری صحیح و به موقع را فراهم کند.')
       ]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 15, 15),
+      ...pProps(AlignmentType.JUSTIFIED, 10, 10),
       children: [
         runProps('۳-۶ ', true),
         runProps('کارفرما متعهد می گردد نمونه های گرفته شده را حداکثر تا ۲۴ ساعت در شرایط مطلوب (جلوگیری از خشک شدن نمونه ها در هوای گرم، جلوگیری از سرما زدگی در هوای سرد، مراقبت از سلامت نمونه ها و جلوگیری از هر گونه آسیب و ضربه به آن ها، عدم جابجایی نمونه ها) نگهداری کند. در صورت بروز هرگونه آسیب به نمونه ها در این مدت عواقب بعدی بر عهده کارفرما خواهد بود.')
       ]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 15, 15),
+      ...pProps(AlignmentType.JUSTIFIED, 10, 10),
       children: [
         runProps('۴-۶ ', true),
         runProps('در صورت عدم اطلاع رسانی به موقع توسط کارفرما جهت انجام عملیات نمونه گیری، هزینه آزمایشات جایگزین اعم از چکش اشمیت یا مغزه گیری بر عهده کارفرما می باشد.')
       ]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 15, 30),
+      ...pProps(AlignmentType.JUSTIFIED, 10, 15),
       children: [
         runProps('۵-۶ ', true),
         runProps('تامین حداقل یک نفر کارگر به همراه وسایل مورد نیاز (یک عدد فرغون و بیل) برای انجام عملیات نمونه گیری توسط نیروهای آزمایشگاه، از سوی کارفرما الزامی است.')
@@ -554,11 +561,11 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
 
     // Article 7: حل اختلاف
     new Paragraph({
-      ...pProps(AlignmentType.RIGHT, 40, 20),
-      children: [runProps('ماده ۷- حل اختلاف', true, 21)]
+      ...pProps(AlignmentType.RIGHT, 15, 10),
+      children: [runProps('ماده ۷- حل اختلاف', true, 20)]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 15, 30),
+      ...pProps(AlignmentType.JUSTIFIED, 10, 15),
       children: [
         runProps('کلیه اختلافاتی که ممکن است در اثر تعبیر و تفسیر مفاد این قرارداد یا در اجرای کار بین طرفین بروز نماید، که نتوان آن را از طریق مذاکرات یا مکاتبات به طور دوستانه و حداکثر ظرف مدت یک ماه حل و فصل نمود، موضوع از طریق ارجاع به هیئات حل اختلاف سازمان نظام مهندسی استان پیگیری خواهد شد و نظر این هیئات برای هر دو طرف حاکم می باشد.')
       ]
@@ -566,11 +573,11 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
 
     // Article 8: نشانی و تعداد نسخه های قرارداد
     new Paragraph({
-      ...pProps(AlignmentType.RIGHT, 40, 20),
-      children: [runProps('ماده ۸- نشانی و تعداد نسخه های قرارداد', true, 21)]
+      ...pProps(AlignmentType.RIGHT, 15, 10),
+      children: [runProps('ماده ۸- نشانی و تعداد نسخه های قرارداد', true, 20)]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 15, 15),
+      ...pProps(AlignmentType.JUSTIFIED, 8, 8),
       children: [
         runProps('نشانی کارفرما: '),
         runProps(customerAddress, true),
@@ -579,7 +586,7 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
       ]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 15, 20),
+      ...pProps(AlignmentType.JUSTIFIED, 8, 12),
       children: [
         runProps('نشانی آزمایشگاه: '),
         runProps(labAddress, true),
@@ -588,7 +595,7 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
       ]
     }),
     new Paragraph({
-      ...pProps(AlignmentType.JUSTIFIED, 25, 40),
+      ...pProps(AlignmentType.JUSTIFIED, 12, 25),
       children: [
         runProps('این قرارداد در دو صفحه و دو نسخه مشتمل بر ۸ ماده و با اعتبار یکسان تنظیم شده و به امضای دو طرف رسیده است.', true, 20)
       ]
@@ -599,11 +606,11 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
 
   const pageBorderConfig = {
     display: PageBorderDisplay.ALL_PAGES,
-    offsetFrom: PageBorderOffsetFrom.TEXT,
-    top: { style: BorderStyle.SINGLE, size: 8, color: '222222', space: 6 },
-    bottom: { style: BorderStyle.SINGLE, size: 8, color: '222222', space: 6 },
-    left: { style: BorderStyle.SINGLE, size: 8, color: '222222', space: 8 },
-    right: { style: BorderStyle.SINGLE, size: 8, color: '222222', space: 8 }
+    offsetFrom: PageBorderOffsetFrom.PAGE,
+    top: { style: BorderStyle.SINGLE, size: 8, color: '111111', space: 18 },
+    bottom: { style: BorderStyle.SINGLE, size: 8, color: '111111', space: 18 },
+    left: { style: BorderStyle.SINGLE, size: 8, color: '111111', space: 18 },
+    right: { style: BorderStyle.SINGLE, size: 8, color: '111111', space: 18 }
   };
 
   const doc = new Document({
@@ -621,9 +628,9 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
           paragraph: {
             alignment: AlignmentType.JUSTIFIED,
             spacing: {
-              line: 270,
-              before: 20,
-              after: 20
+              line: 285,
+              before: 12,
+              after: 12
             }
           }
         }
@@ -634,8 +641,8 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
         properties: {
           page: {
             margin: {
-              top: 567,    // 10 mm
-              bottom: 567, // 10 mm
+              top: 720,    // 12.7 mm
+              bottom: 720, // 12.7 mm
               left: 720,   // 12.7 mm
               right: 720
             },
@@ -650,8 +657,8 @@ export async function generateAndDownloadContractDocx(data: ContractExportData, 
         properties: {
           page: {
             margin: {
-              top: 567,
-              bottom: 567,
+              top: 720,
+              bottom: 720,
               left: 720,
               right: 720
             },

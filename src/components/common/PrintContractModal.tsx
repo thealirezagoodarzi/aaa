@@ -22,7 +22,7 @@ import { LAB_INFO } from '../../services/supabase';
 // PERF FIX (audit #46): html2pdf.js (pulled in by contractPdfGenerator) is also
 // multi-MB — loaded lazily via dynamic import() on first PDF export click.
 // import { downloadContractPdf } from '../../utils/contractPdfGenerator';
-import { printOnlyElement, downloadBlob } from '../../utils/printDom';
+import { printOnlyElement, printIsolatedElement, downloadBlob } from '../../utils/printDom';
 
 interface PrintContractModalProps {
   customer: Customer | null;
@@ -70,10 +70,11 @@ export const PrintContractModal: React.FC<PrintContractModalProps> = ({
   if (!customer) return null;
 
   const handlePrint = () => {
-    // Print only the contract document; fall back to full page print if the
-    // printable element is not mounted yet.
-    if (!printOnlyElement('contract-printable-doc')) {
-      window.print();
+    // Print isolated 2-page contract using dedicated iframe to prevent dashboard bleeding
+    if (!printIsolatedElement('contract-printable-doc', 'قرارداد رسمی ارائه خدمات آزمایشگاهی بتن')) {
+      if (!printOnlyElement('contract-printable-doc')) {
+        window.print();
+      }
     }
   };
 
@@ -256,16 +257,27 @@ export const PrintContractModal: React.FC<PrintContractModalProps> = ({
               </button>
             )}
 
-            {/* Single Unified PDF & Print Button */}
+            {/* Direct Print Button (Isolated Iframe, Clean 2-page A4) */}
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-indigo-600/20 active:scale-95 cursor-pointer"
+              title="چاپ مستقیم قرارداد دو صفحه‌ای با ابعاد دقیق A4 بدون پس‌زمینه"
+            >
+              <Printer className="w-4 h-4" />
+              <span>چاپ قرارداد (A4)</span>
+            </button>
+
+            {/* Download PDF Button */}
             <button
               type="button"
               onClick={handleDownloadPdf}
               disabled={isGeneratingPdf}
-              className="px-4 py-2 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-rose-600/20 active:scale-95 cursor-pointer"
-              title="چاپ و دانلود مستقیم فایل PDF رسمی قرارداد دو صفحه‌ای"
+              className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-rose-600/20 active:scale-95 cursor-pointer"
+              title="دانلود فایل PDF رسمی قرارداد دو صفحه‌ای"
             >
               <FileDown className="w-4 h-4" />
-              <span>{isGeneratingPdf ? 'در حال ایجاد فایل PDF (۲ صفحه)...' : 'چاپ و دانلود قرارداد (PDF / A4)'}</span>
+              <span>{isGeneratingPdf ? 'در حال ایجاد فایل PDF (۲ صفحه)...' : 'دانلود PDF رسمی'}</span>
             </button>
 
             {/* Real Word (.docx) Download Button - ONLY FOR LAB ADMIN / STAFF (HIDDEN FOR CUSTOMER) */}
@@ -275,10 +287,10 @@ export const PrintContractModal: React.FC<PrintContractModalProps> = ({
                 onClick={handleDownloadDocx}
                 disabled={isGeneratingDocx}
                 className="px-3.5 py-2 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-blue-700/20 active:scale-95 cursor-pointer"
-                title="دانلود فایل واقعی Word (.docx) قابل ویرایش با کادر دور صفحه و جدول‌ها"
+                title="دانلود فایل Word (.docx) قابل ویرایش، ۲ صفحه‌ای و منطبق با پیش‌نمایش"
               >
                 <FileText className="w-4 h-4" />
-                <span>{isGeneratingDocx ? 'در حال ایجاد فایل ورد...' : 'خروجی Word (.docx)'}</span>
+                <span>{isGeneratingDocx ? 'در حال ایجاد ورد...' : 'دانلود Word (.docx)'}</span>
               </button>
             )}
 
@@ -644,18 +656,13 @@ export const PrintContractModal: React.FC<PrintContractModalProps> = ({
                   <strong>تبصره ۱:</strong> در صورت اعمال اضافه بنا و تغییر دفعات بتن ریزی و افزایش تعداد سری نمونه گیری، حق الزحمه نمونه های مازاد بر اساس نرخ مصوب ملاک عمل خدمات فنی و آزمایشگاهی محاسبه می گردد و مالک موظف به پرداخت آن خواهد بود.
                 </p>
               </div>
-
-              {/* Article 5: Beginning on Page 1 (Item 1-5 only) */}
-              <div>
-                <h3 className="font-bold text-sm sm:text-[14px] mb-1.5">ماده ۵- تعهدات شرکت</h3>
-                <p className="text-justify leading-relaxed">
-                  <strong>۱-۵</strong> حضور تکنسین با تجهیزات لازم در زمان بتن ریزی و انجام عملیات نمونه گیری.
-                </p>
-              </div>
             </div>
 
-            {/* Bottom Padding of Page 1 */}
-            <div className="pt-2"></div>
+            {/* Bottom Footer of Page 1 */}
+            <div className="pt-3 border-t border-slate-200 mt-4 flex items-center justify-between text-[11px] text-slate-500">
+              <span>قرارداد رسمی ارائه خدمات آزمایشگاهی، نمونه‌برداری و تعیین مقاومت فشاری بتن</span>
+              <span className="font-bold">صفحه ۱ از ۲</span>
+            </div>
           </div>
 
           {/* ========================================================================= */}
@@ -672,8 +679,17 @@ export const PrintContractModal: React.FC<PrintContractModalProps> = ({
             }}
           >
             <div>
-              {/* Continuation of Article 5 (Items 2-5 through 6-5) */}
-              <div className="mb-3.5 pt-1">
+              {/* Header for Page 2 */}
+              <div className="text-center mb-3 pb-2 border-b border-slate-200">
+                <p className="text-xs font-bold text-slate-700">به نام خدا - ادامه قرارداد ارائه خدمات آزمایشگاهی بتن</p>
+              </div>
+
+              {/* Article 5: تعهدات شرکت (کامل و یکپارچه در صفحه دوم) */}
+              <div className="mb-3.5">
+                <h3 className="font-bold text-sm sm:text-[14px] mb-1.5">ماده ۵- تعهدات شرکت</h3>
+                <p className="mb-1.5 text-justify leading-relaxed">
+                  <strong>۱-۵</strong> حضور تکنسین با تجهیزات لازم در زمان بتن ریزی و انجام عملیات نمونه گیری.
+                </p>
                 <p className="mb-1.5 text-justify leading-relaxed">
                   <strong>۲-۵</strong> زمان و محل نمونه گیری توسط مهندس ناظر سازه و در صورت عدم حضور ایشان، توسط آزمایشگاه تعیین می گردد.
                 </p>
@@ -772,6 +788,11 @@ export const PrintContractModal: React.FC<PrintContractModalProps> = ({
               </div>
             </div>
 
+            {/* Bottom Footer of Page 2 */}
+            <div className="pt-2 border-t border-slate-200 mt-2 flex items-center justify-between text-[11px] text-slate-500">
+              <span>قرارداد رسمی ارائه خدمات آزمایشگاهی، نمونه‌برداری و تعیین مقاومت فشاری بتن</span>
+              <span className="font-bold">صفحه ۲ از ۲</span>
+            </div>
           </div>
 
         </div>
