@@ -1330,10 +1330,24 @@ export class ConcreteLabStorage {
       // the raw value locally and re-pushed the whole collection via
       // persistCollection — a write-war that could wipe the stored hash.
       const { initialPassword } = this.sanitizeProfilePayload({ password: profile.password });
+      // Enforce role immutability:
+      let assignedRole = existing.role;
+      if (isTargetSoleAdmin) {
+        assignedRole = 'admin';
+      } else if (existing.role === 'operator') {
+        // Operators cannot be changed to customer or any other role
+        assignedRole = 'operator';
+      } else if (existing.role === 'customer') {
+        // Customers cannot be changed to operator
+        assignedRole = 'customer';
+      } else {
+        assignedRole = profile.role || existing.role;
+      }
+
       targetProfile = { 
         ...existing, 
         ...profile,
-        role: isTargetSoleAdmin ? 'admin' : (profile.role === 'admin' ? (existing.role === 'admin' ? 'operator' : existing.role) : (profile.role || existing.role)),
+        role: assignedRole,
         password: undefined as any
       };
       delete (targetProfile as any).password;
@@ -1386,6 +1400,18 @@ export class ConcreteLabStorage {
         }
       }
 
+      // Role immutability enforcement
+      if (target.role === 'operator' && newRole !== 'operator') {
+        const msg = 'نقش اپراتور فنی آزمایشگاه بتن ثابت است و امکان تغییر آن به مشتری وجود ندارد.';
+        console.warn(msg);
+        throw new Error(msg);
+      }
+      if (target.role === 'customer' && newRole !== 'customer') {
+        const msg = 'نقش کارفرما / مشتری امکان تغییر به اپراتور را ندارد.';
+        console.warn(msg);
+        throw new Error(msg);
+      }
+
       const previousRole = target.role;
       const assignedRole = isTargetSoleAdmin ? 'admin' : newRole;
       target.role = assignedRole;
@@ -1409,6 +1435,17 @@ export class ConcreteLabStorage {
     return false;
   }
 
+  public async toggleUserStatus(userId: string): Promise<UserProfile> {
+    const idx = this.state.profiles.findIndex(p => p.id === userId || p.username === userId);
+    if (idx < 0) throw new Error('کاربر یافت نشد.');
+    const user = this.state.profiles[idx];
+    if (user.id === SOLE_ADMIN_ID || user.username === SOLE_ADMIN_USERNAME) {
+      throw new Error('وضعیت حساب کاربری مدیر ارشد واحد سامانه همواره فعال و غیرقابل تعلیق است.');
+    }
+    const newStatus: 'active' | 'inactive' = user.status === 'inactive' ? 'active' : 'inactive';
+    return await this.updateProfile({ ...user, status: newStatus });
+  }
+
   public deleteProfile(profileId: string): boolean {
     if (profileId === SOLE_ADMIN_ID || profileId === SOLE_ADMIN_USERNAME) {
       console.warn('حساب کاربری مدیر ارشد واحد سامانه غیرقابل حذف است.');
@@ -1428,7 +1465,7 @@ export class ConcreteLabStorage {
     return false;
   }
 
-  public async updateUserPassword(userId: string, newPassword: string, currentPassword?: string): Promise<boolean> {
+  public async updateUserPassword(userId: string, newPassword: string, currentPassword?: string, forceMustChangePassword?: boolean): Promise<boolean> {
     // Clear any stale server rejection from a previous attempt before pushing.
     this.lastWriteError = null;
     const idx = this.state.profiles.findIndex(p => p.id === userId || p.username === userId || p.email === userId);
@@ -1443,7 +1480,8 @@ export class ConcreteLabStorage {
     const ok = await this.pushServer('update-password', {
       userId: targetId,
       newPassword,
-      ...(currentPassword ? { currentPassword } : {})
+      ...(currentPassword ? { currentPassword } : {}),
+      ...(forceMustChangePassword ? { forceMustChangePassword: true } : {})
     });
 
     if (ok) {
@@ -1451,6 +1489,9 @@ export class ConcreteLabStorage {
       this.pendingNewPassword = null;
       if (idx >= 0) {
         delete (this.state.profiles[idx] as any).password;
+        if (forceMustChangePassword) {
+          this.state.profiles[idx].mustChangePassword = true;
+        }
       }
     } else if (this.currentUser && this.currentUser.id === targetId) {
       this.pendingNewPassword = newPassword;

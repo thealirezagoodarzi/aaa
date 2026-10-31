@@ -2958,7 +2958,7 @@ export async function updateUserPassword(
   userId: string,
   newPassword: string,
   currentPassword?: string,
-  options?: { requireCurrentForNonAdmin?: boolean }
+  options?: { requireCurrentForNonAdmin?: boolean; forceMustChangePassword?: boolean }
 ): Promise<boolean | 'wrong-current'> {
   // FIX #1: accept ONLY a plaintext password (hashed here with real scrypt).
   const pwd = normalizeIncomingPassword(newPassword);
@@ -2997,9 +2997,13 @@ export async function updateUserPassword(
   }
 
   const newSessionVersion = (target.sessionVersion || 1) + 1;
+  const shouldForceChange = options?.forceMustChangePassword === true;
   current.profiles = current.profiles.map((p: any) =>
-    p === target ? { ...p, password: hashPassword(pwd), mustChangePassword: false, sessionVersion: newSessionVersion } : p
+    p === target ? { ...p, password: hashPassword(pwd), mustChangePassword: shouldForceChange, sessionVersion: newSessionVersion } : p
   );
+  if (shouldForceChange) {
+    setSessionMustChangePasswordForUser(String(target.id), true);
+  }
 
   // AUTH-05: Invalidate all existing session tokens and refresh tokens on password change
   try {
@@ -3790,18 +3794,34 @@ export async function updateProfileServer(
       throw err;
     }
 
-    // Assert final role belongs to the same identity class (staff vs customer) as the stored record
-    const existingIsStaff = existing.role === 'admin' || existing.role === 'operator';
-    const finalIsStaff = finalRole === 'admin' || finalRole === 'operator';
-    if (!trustedInternalWrite && existingIsStaff !== finalIsStaff) {
-      const err: any = new Error('ROLE_CLASS_MISMATCH: تغییر کلاس کاربری بین پرسنل آزمایشگاه و مشتری از طریق این بخش مجاز نمی‌باشد.');
-      err.statusCode = 400;
-      throw err;
+    // Assert final role belongs to the same immutable class (operator vs customer vs admin)
+    if (!trustedInternalWrite) {
+      if (existing.role === 'operator' && finalRole !== 'operator') {
+        const err: any = new Error('ROLE_IMMUTABLE: نقش اپراتور فنی آزمایشگاه بتن ثابت است و امکان تغییر آن به مشتری یا نقش دیگر وجود ندارد.');
+        err.statusCode = 400;
+        throw err;
+      }
+      if (existing.role === 'customer' && finalRole !== 'customer') {
+        const err: any = new Error('ROLE_IMMUTABLE: نقش کارفرما / مشتری امکان تغییر به اپراتور یا پرسنل فنی را ندارد.');
+        err.statusCode = 400;
+        throw err;
+      }
+    }
+
+    const finalStatus = isTargetSoleAdmin
+      ? 'active'
+      : (profile.status === 'inactive' ? 'inactive' : (profile.status || existing.status || 'active'));
+
+    if (existing.status === 'active' && finalStatus === 'inactive') {
+      try {
+        revokeAllUserSessions(existing.id);
+      } catch { /* non-fatal */ }
     }
 
     updated = {
       ...existing,
       ...profile,
+      status: finalStatus,
       role: finalRole,
       password: newPwd
     };
@@ -4054,6 +4074,16 @@ export async function updateUserRoleServer(userId: string, role: string): Promis
       if (role === 'admin') {
         return { success: false, error: 'دسترسی مدیریت به هیچ وجه به کاربر دیگری داده نمی‌شود. سیستم دارای یک مدیر ارشد واحد است.' };
       }
+    }
+
+    // Role Freeze Security Rule:
+    // When an operator is created, their role CANNOT be changed to customer or any other role.
+    if (target.role === 'operator' && role !== 'operator') {
+      return { success: false, error: 'نقش اپراتور فنی آزمایشگاه بتن ثابت است و امکان تغییر آن به مشتری یا سایر نقش‌ها وجود ندارد.' };
+    }
+    // When a customer is created, their role CANNOT be changed to operator.
+    if (target.role === 'customer' && role !== 'customer') {
+      return { success: false, error: 'تغییر نقش مشتری به اپراتور فنی مجاز نمی‌باشد. پرسنل فنی باید مستقلاً از طریق بخش پرسنل تعریف شوند.' };
     }
 
     target.role = isTargetSoleAdmin ? 'admin' : (role === 'admin' ? 'operator' : role);

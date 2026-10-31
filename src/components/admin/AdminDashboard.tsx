@@ -230,14 +230,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // User Management States (Admin Oversight)
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [isSubmittingEditUser, setIsSubmittingEditUser] = useState(false);
+  const [editUserError, setEditUserError] = useState<string | null>(null);
   const [passwordResetUser, setPasswordResetUser] = useState<UserProfile | null>(null);
   const [showAdminSmsPasswordModal, setShowAdminSmsPasswordModal] = useState(false);
   const [showTechsModal, setShowTechsModal] = useState(false);
   const [newPasswordValue, setNewPasswordValue] = useState('');
+  const [resetForceMustChange, setResetForceMustChange] = useState(true);
+  const [showResetPasswordPlain, setShowResetPasswordPlain] = useState(false);
+  const [isSubmittingPasswordReset, setIsSubmittingPasswordReset] = useState(false);
+  const [userToDeleteConfirm, setUserToDeleteConfirm] = useState<UserProfile | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [userRoleFilter, setUserRoleFilter] = useState<'all' | 'staff' | 'customer'>('all');
+  const [userRoleFilter, setUserRoleFilter] = useState<'all' | 'staff' | 'customer' | 'inactive'>('all');
   const [showNewUserModal, setShowNewUserModal] = useState(false);
+  const [newUserForceChange, setNewUserForceChange] = useState(true);
   const [newUserData, setNewUserData] = useState<{
     fullName: string;
     email: string;
@@ -281,6 +288,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   useModalBack(Boolean(editingReport), () => setEditingReport(null), 'admin-modal-edit-rep');
   useModalBack(Boolean(editingUser), () => setEditingUser(null), 'admin-modal-edit-user');
   useModalBack(showNewUserModal, () => setShowNewUserModal(false), 'admin-modal-new-user');
+  useModalBack(Boolean(passwordResetUser), () => setPasswordResetUser(null), 'admin-modal-pwd-reset');
+  useModalBack(Boolean(userToDeleteConfirm), () => setUserToDeleteConfirm(null), 'admin-modal-del-user');
   useModalBack(showNewTransModal, () => setShowNewTransModal(false), 'admin-modal-new-trans');
   useModalBack(showTechsModal, () => setShowTechsModal(false), 'admin-modal-techs');
   useModalBack(showAdminSmsPasswordModal, () => setShowAdminSmsPasswordModal(false), 'admin-modal-sms-pwd');
@@ -2070,38 +2079,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {activeTab === 'users' && (
         <div className="space-y-6">
           {/* Top Header & Action */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs">
             <div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 text-xs font-bold mb-1 border border-blue-200 dark:border-blue-800/60">
-                <Users className="w-3.5 h-3.5" />
-                <span>مدیریت دسترسی‌ها و پرسنل آزمایشگاه</span>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 text-xs font-bold mb-2 border border-blue-200 dark:border-blue-800/60">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>سامانه مدیریت متمرکز دسترسی‌ها و پرسنل فنی آزمایشگاه</span>
               </div>
-              <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                مدیریت کاربران، تکنسین‌ها و مدیران آزمایشگاه
+              <h2 className="text-xl font-black text-slate-900 dark:text-white">
+                مدیریت کاربران، تکنسین‌ها و سطوح دسترسی آزمایشگاه
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                مدیریت حساب‌های کاربری پرسنل و تعیین نقش‌های فنی (مشتریان و کارفرمایان در بخش اختصاصی «مشتریان و پروژه‌ها» مدیریت می‌شوند).
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                تعریف و پایش حساب‌های کاربری پرسنل فنی (اپراتورها)، نظارت بر وضعیت فعالیت، بازنشانی امن کلمه عبور و کنترل دسترسی کارفرمایان به پرتال نتایج آزمون بتن.
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2.5">
-              <div className="relative">
-                <input
-                  type="text"
-                  value={userSearch}
-                  onChange={(e) => setUserSearch(e.target.value)}
-                  placeholder="جستجوی نام، ایمیل، شناسه یا شماره پرسنلی..."
-                  className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 pe-9 text-xs font-medium text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[240px]"
-                />
-                <Search className="w-4 h-4 text-slate-400 absolute end-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
-
+            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
               <button
                 onClick={() => setShowTechsModal(true)}
-                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-bold text-xs shadow-xs transition active:scale-95 shrink-0 cursor-pointer"
+                className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
               >
                 <Users className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                <span>مدیریت تکنسین‌های مسئول اعزام</span>
+                <span>مدیریت تکنسین‌های اعزام</span>
               </button>
 
               <button
@@ -2115,22 +2113,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     password: generateRandomPassword(),
                     customerId: ''
                   });
+                  setNewUserForceChange(true);
+                  setNewUserError(null);
                   setShowNewUserModal(true);
                 }}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition active:scale-95 shrink-0 cursor-pointer"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition active:scale-95 cursor-pointer"
               >
                 <UserPlus className="w-4 h-4" />
-                <span>تعریف کاربر جدید پرسنل</span>
+                <span>تعریف اپراتور / تکنسین جدید</span>
               </button>
             </div>
           </div>
 
-          {/* User Stat Counters & Role Filters */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700">
+          {/* Security Principle Notice Banner */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50/80 to-emerald-50/60 dark:from-blue-950/30 dark:to-emerald-950/20 border border-blue-200 dark:border-blue-900/60 flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-blue-600 text-white shrink-0 mt-0.5 shadow-xs">
+              <Lock className="w-4 h-4" />
+            </div>
+            <div className="text-xs space-y-1">
+              <strong className="text-slate-900 dark:text-white font-black block">
+                امنیت یکپارچگی نقش‌ها و اصل تفکیک وظایف (Role Immutability)
+              </strong>
+              <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-[11px]">
+                مطابق با استاندارد امنیت اطلاعات و نظام کنترل کیفیت آزمایشگاه (ISO/IEC 17025)، حساب‌های کاربری پرسنل فنی (اپراتورها) دارای نقش ثابت بوده و امکان تبدیل مستقیم آن‌ها به مشتری یا بالعکس وجود ندارد. این سازوکار از تداخل اختیارات در ثبت نمونه، تایید مقاومت فشاری و افشای اطلاعات محرمانه پروژه‌ها ممانعت به عمل می‌آورد.
+              </p>
+            </div>
+          </div>
+
+          {/* Stat Counters Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">کل کاربران سیستم</span>
+              <strong className="text-xl font-black text-slate-900 dark:text-white font-mono mt-1 block">
+                {toPersianDigits(profiles.length)}
+              </strong>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-900/50 shadow-xs">
+              <span className="text-[11px] font-bold text-purple-600 dark:text-purple-400 block">مدیر ارشد سامانه</span>
+              <strong className="text-xl font-black text-purple-700 dark:text-purple-300 font-mono mt-1 block">
+                {toPersianDigits(1)} حساب واحد
+              </strong>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-900/50 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 block">اپراتورهای فنی بتن</span>
+                <span className="text-[9px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded font-bold">نقش ثابت</span>
+              </div>
+              <strong className="text-xl font-black text-emerald-700 dark:text-emerald-300 font-mono mt-1 block">
+                {toPersianDigits(profiles.filter(p => p.role === 'operator').length)}
+              </strong>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-900/50 shadow-xs">
+              <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 block">کارفرمایان متصل</span>
+              <strong className="text-xl font-black text-blue-700 dark:text-blue-300 font-mono mt-1 block">
+                {toPersianDigits(profiles.filter(p => p.role === 'customer').length)}
+              </strong>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-900/50 shadow-xs col-span-2 sm:col-span-1">
+              <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400 block">حساب‌های معلق / غیرفعال</span>
+              <strong className="text-xl font-black text-rose-700 dark:text-rose-300 font-mono mt-1 block">
+                {toPersianDigits(profiles.filter(p => p.status === 'inactive').length)}
+              </strong>
+            </div>
+          </div>
+
+          {/* Search & Filter Toolbar */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+            <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700">
               <button
                 onClick={() => setUserRoleFilter('all')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                   userRoleFilter === 'all' 
                     ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs' 
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -2140,17 +2196,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </button>
               <button
                 onClick={() => setUserRoleFilter('staff')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                   userRoleFilter === 'staff' 
-                    ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs' 
+                    ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-xs' 
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                پرسنل فنی و آزمایشگاه ({toPersianDigits(profiles.filter(p => p.role === 'admin' || p.role === 'operator').length)})
+                اپراتورها و پرسنل فنی ({toPersianDigits(profiles.filter(p => p.role === 'admin' || p.role === 'operator').length)})
               </button>
               <button
                 onClick={() => setUserRoleFilter('customer')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                   userRoleFilter === 'customer' 
                     ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs' 
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -2158,52 +2214,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               >
                 کارفرمایان و مشتریان ({toPersianDigits(profiles.filter(p => p.role === 'customer').length)})
               </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-              <span className="text-[11px] font-bold text-slate-400 block">کل حساب‌های کاربری</span>
-              <strong className="text-xl font-black text-slate-900 dark:text-white font-mono mt-1 block">
-                {toPersianDigits(profiles.length)}
-              </strong>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-900/50 shadow-xs">
-              <span className="text-[11px] font-bold text-purple-600 dark:text-purple-400 block">مدیر ارشد سامانه (ثابت و یکتا)</span>
-              <strong className="text-xl font-black text-purple-700 dark:text-purple-300 font-mono mt-1 block">
-                {toPersianDigits(1)} حساب واحد
-              </strong>
+              <button
+                onClick={() => setUserRoleFilter('inactive')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  userRoleFilter === 'inactive' 
+                    ? 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-xs' 
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                غیرفعال / معلق ({toPersianDigits(profiles.filter(p => p.status === 'inactive').length)})
+              </button>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 block">اپراتورها و تکنسین‌های فنی</span>
-              <strong className="text-xl font-black text-emerald-700 dark:text-emerald-300 font-mono mt-1 block">
-                {toPersianDigits(profiles.filter(p => p.role === 'operator').length)}
-              </strong>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-              <span className="text-[11px] font-bold text-cyan-600 dark:text-cyan-400 block">کارفرمایان متصل</span>
-              <strong className="text-xl font-black text-cyan-700 dark:text-cyan-300 font-mono mt-1 block">
-                {toPersianDigits(profiles.filter(p => p.role === 'customer').length)}
-              </strong>
+            <div className="relative min-w-[260px]">
+              <input
+                type="text"
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+                placeholder="جستجوی نام، نام کاربری، شناسه، تلفن یا شرکت..."
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 pe-9 ps-8 text-xs font-medium text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <Search className="w-4 h-4 text-slate-400 absolute end-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              {userSearch && (
+                <button
+                  onClick={() => setUserSearch('')}
+                  className="absolute start-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs cursor-pointer p-0.5"
+                  title="پاک کردن جستجو"
+                >
+                  ✕
+                </button>
+              )}
             </div>
           </div>
 
           {/* Users Table */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-start">
-                <thead className="bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 text-slate-500 font-bold">
+                <thead className="bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-bold">
                   <tr>
-                    <th className="p-3.5 text-start">مشخصات کاربر</th>
-                    <th className="p-3.5 text-start">نام کاربری / ایمیل</th>
-                    <th className="p-3.5 text-start">نقش و دسترسی</th>
-                    <th className="p-3.5 text-start">شماره تماس</th>
-                    <th className="p-3.5 text-start">رمز عبور جاری</th>
-                    <th className="p-3.5 text-start">وضعیت</th>
-                    <th className="p-3.5 text-center">عملیات مدیریت</th>
+                    <th className="p-4 text-start">مشخصات کاربر و شناسه</th>
+                    <th className="p-4 text-start">نام کاربری و راه‌های تماس</th>
+                    <th className="p-4 text-start">نقش سازمانی و اختیارات</th>
+                    <th className="p-4 text-center">وضعیت دسترسی</th>
+                    <th className="p-4 text-center">امنیت کلمه عبور</th>
+                    <th className="p-4 text-center">عملیات مدیریت</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -2212,6 +2267,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       if (!p) return false;
                       if (userRoleFilter === 'staff') return p.role === 'admin' || p.role === 'operator';
                       if (userRoleFilter === 'customer') return p.role === 'customer';
+                      if (userRoleFilter === 'inactive') return p.status === 'inactive';
                       return true;
                     })
                     .filter(p => {
@@ -2221,119 +2277,213 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       const email = (p.email || '').toLowerCase();
                       const uname = (p.username || '').toLowerCase();
                       const phone = (p.phone || '');
-                      return name.includes(s) || email.includes(s) || uname.includes(s) || phone.includes(s);
+                      const uid = (p.id || '').toLowerCase();
+                      const cust = customers.find(c => c.id === p.customerId);
+                      const cName = (cust?.companyName || '').toLowerCase();
+                      return name.includes(s) || email.includes(s) || uname.includes(s) || phone.includes(s) || uid.includes(s) || cName.includes(s);
                     }).map((p) => {
                     const cust = customers.find(c => c.id === p.customerId);
                     const displayName = p.fullName || p.username || 'کاربر سیستم';
                     const isAdmin = p.id === 'usr-admin-01' || p.username === 'admin' || p.role === 'admin';
+                    const isOperator = p.role === 'operator';
+                    const isCustomer = p.role === 'customer';
+                    const isInactive = p.status === 'inactive';
+                    const initials = (displayName || 'U').trim().slice(0, 2);
+
                     return (
                       <tr key={p.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition">
                         {/* Name & ID */}
-                        <td className="p-3.5">
-                          <div className="font-bold text-slate-900 dark:text-white">
-                            {displayName}
+                        <td className="p-4">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-9 h-9 rounded-2xl flex items-center justify-center font-bold text-xs shrink-0 shadow-xs relative ${
+                              isAdmin ? 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border border-purple-300 dark:border-purple-700' :
+                              isOperator ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700' :
+                              'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
+                            }`}>
+                              {initials}
+                              <span className={`absolute -bottom-0.5 -end-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-slate-900 ${
+                                isInactive ? 'bg-rose-500' : 'bg-emerald-500'
+                              }`} title={isInactive ? 'حساب کاربری غیرفعال / معلق' : 'حساب کاربری فعال'} />
+                            </div>
+
+                            <div>
+                              <div className="font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                                <span>{displayName}</span>
+                                {isAdmin && (
+                                  <span className="text-[10px] bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 px-1.5 py-0.2 rounded font-bold">
+                                    مدیر ارشد
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-[10px] font-mono text-slate-400" dir="ltr">
+                                  {p.id}
+                                </span>
+                                {p.createdAt && (
+                                  <span className="text-[10px] text-slate-400">
+                                    • ثبت: {formatJalali(p.createdAt)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                          <span className="text-[10px] font-mono text-slate-400">
-                            شناسه: {p.id}
-                          </span>
                         </td>
 
                         {/* Email & Username */}
-                        <td className="p-3.5">
-                          <div className="font-mono text-slate-800 dark:text-slate-200 font-medium" dir="ltr">
-                            {p.email || '-'}
+                        <td className="p-4">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1 text-slate-800 dark:text-slate-200 font-mono text-xs font-bold" dir="ltr">
+                              <span>{p.username || p.email}</span>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(p.username || p.email || '');
+                                  setSuccessMessage(`نام کاربری «${p.username || p.email}» کپی شد.`);
+                                  setTimeout(() => setSuccessMessage(null), 2000);
+                                }}
+                                className="p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                                title="کپی نام کاربری"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                            </div>
+
+                            <div className="flex flex-col gap-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                              {p.phone ? (
+                                <a href={`tel:${p.phone}`} className="flex items-center gap-1 font-mono hover:text-blue-600" dir="ltr">
+                                  <Phone className="w-3 h-3" />
+                                  <span>{p.phone}</span>
+                                </a>
+                              ) : (
+                                <span className="text-[10px] text-slate-400">بدون شماره تماس</span>
+                              )}
+                              {p.email && p.email !== p.username && (
+                                <span className="font-mono text-[10px] text-slate-400 truncate max-w-[180px]" dir="ltr">
+                                  {p.email}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          {p.username && (
-                            <div className="text-[10px] font-mono text-slate-400" dir="ltr">
-                              کد کاربری: {p.username}
+                        </td>
+
+                        {/* Role - Fixed and Strict */}
+                        <td className="p-4">
+                          {isAdmin ? (
+                            <div className="inline-flex flex-col gap-0.5 p-2 rounded-2xl bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 text-purple-800 dark:text-purple-300">
+                              <div className="flex items-center gap-1.5 font-bold text-xs">
+                                <ShieldCheck className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                                <span>مدیر ارشد سامانه (واحد و یکتا)</span>
+                              </div>
+                              <span className="text-[10px] text-purple-600/80 dark:text-purple-400/80 font-medium pe-2">
+                                دسترسی کامل اداری، مالی و فنی
+                              </span>
+                            </div>
+                          ) : isOperator ? (
+                            <div className="inline-flex flex-col gap-0.5 p-2 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300">
+                              <div className="flex items-center justify-between gap-2 font-bold text-xs">
+                                <span className="flex items-center gap-1.5">
+                                  <FlaskConical className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                  اپراتور فنی آزمایشگاه بتن
+                                </span>
+                                <span className="inline-flex items-center gap-1 text-[9px] bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded font-bold">
+                                  <Lock className="w-2.5 h-2.5" />
+                                  نقش ثابت فنی
+                                </span>
+                              </div>
+                              <span className="text-[10px] text-emerald-700/80 dark:text-emerald-400/80 font-medium">
+                                ثبت نمونه، آزمون مقاومت فشاری و شیت استاندارد
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="inline-flex flex-col gap-0.5 p-2 rounded-2xl bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-300">
+                              <div className="flex items-center gap-1.5 font-bold text-xs">
+                                <Building2 className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                                <span>کارفرما و مشتری پرتال</span>
+                              </div>
+                              <span className="text-[10px] text-blue-700/80 dark:text-blue-400/80 font-medium">
+                                {cust ? `متصل به: ${cust.companyName}` : 'مشاهده نتایج شیت‌های تاییدشده'}
+                              </span>
                             </div>
                           )}
                         </td>
 
-                        {/* Role */}
-                        <td className="p-3.5">
-                          <div className="flex items-center gap-1.5">
-                            {isAdmin ? (
-                              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-[11px] bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700 shadow-xs">
-                                <ShieldCheck className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-                                <span>مدیر ارشد سامانه (واحد و یکتا)</span>
-                              </div>
-                            ) : (
-                              <select
-                                value={p.role}
-                                onChange={async (e) => {
-                                  const newRole = e.target.value as 'operator' | 'customer';
-                                  if (newRole === p.role) return;
-                                  const roleTitle = newRole === 'operator' ? 'اپراتور و تکنسین بتن' : 'مشتری و کارفرما';
-                                  const ok = window.confirm(`آیا می‌خواهید نقش کاربر «${p.fullName}» به «${roleTitle}» تغییر کند؟`);
-                                  if (!ok) return;
-                                  try {
-                                    await labDb.updateUserRole(p.id, newRole);
-                                    setProfiles(labDb.getProfiles());
-                                    setSuccessMessage(`نقش کاربر «${p.fullName}» با موفقیت به «${roleTitle}» تغییر یافت و ذخیره شد.`);
-                                    setTimeout(() => setSuccessMessage(null), 3500);
-                                  } catch (err: any) {
-                                    setErrorMessage(err?.message || 'خطا در تغییر نقش کاربر در سرور.');
-                                    setTimeout(() => setErrorMessage(null), 4000);
-                                    setProfiles(labDb.getProfiles());
-                                  }
-                                }}
-                                className={`px-2.5 py-1 rounded-xl font-bold text-[11px] cursor-pointer outline-none border transition ${
-                                  p.role === 'operator'
-                                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100'
-                                    : p.role === 'admin'
-                                    ? 'bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border-purple-300 dark:border-purple-700'
-                                    : 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border-blue-300 dark:border-blue-700 hover:bg-blue-100'
-                                }`}
-                              >
-                                {p.role === 'admin' && (
-                                  <option value="admin" disabled>مدیر ارشد (غیرقابل تغییر)</option>
-                                )}
-                                <option value="operator">اپراتور و تکنسین بتن</option>
-                                <option value="customer">مشتری و کارفرما</option>
-                              </select>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Phone */}
-                        <td className="p-3.5 font-mono text-slate-700 dark:text-slate-300" dir="ltr">
-                          {p.phone || '-'}
-                        </td>
-
-                        {/* Password display & quick change */}
-                        <td className="p-3.5">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-mono font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-[11px]" dir="ltr">
-                              {p.password || '******'}
+                        {/* Status & Quick Toggle */}
+                        <td className="p-4 text-center">
+                          {isAdmin ? (
+                            <span className="inline-flex items-center gap-1 text-purple-700 dark:text-purple-300 font-bold text-[11px] bg-purple-50 dark:bg-purple-950 px-2.5 py-1 rounded-full border border-purple-200 dark:border-purple-800">
+                              <ShieldCheck className="w-3 h-3 text-purple-600" />
+                              همواره فعال
                             </span>
+                          ) : (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await labDb.toggleUserStatus(p.id);
+                                  setProfiles(labDb.getProfiles());
+                                  const newStatusFa = isInactive ? 'فعال' : 'معلق و غیرفعال';
+                                  setSuccessMessage(`وضعیت کاربر «${displayName}» با موفقیت به «${newStatusFa}» تغییر یافت.`);
+                                  setTimeout(() => setSuccessMessage(null), 3500);
+                                } catch (err: any) {
+                                  setErrorMessage(err?.message || 'خطا در تغییر وضعیت کاربر در سرور.');
+                                  setTimeout(() => setErrorMessage(null), 4000);
+                                }
+                              }}
+                              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-bold text-[11px] border transition cursor-pointer active:scale-95 ${
+                                isInactive 
+                                  ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800' 
+                                  : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                              }`}
+                              title={isInactive ? "جهت فعال‌سازی مجدد حساب کلیک کنید" : "جهت تعلیق موقت حساب کلیک کنید"}
+                            >
+                              {isInactive ? (
+                                <>
+                                  <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                                  <span>معلق / غیرفعال</span>
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                  <span>فعال</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </td>
+
+                        {/* Password security indicator */}
+                        <td className="p-4 text-center">
+                          <div className="inline-flex flex-col items-center gap-1">
                             <button
                               onClick={() => {
                                 if (isAdmin) {
                                   setShowAdminSmsPasswordModal(true);
                                 } else {
                                   setPasswordResetUser(p);
-                                  setNewPasswordValue(p.password || '');
+                                  setNewPasswordValue(generateRandomPassword());
+                                  setResetForceMustChange(true);
                                 }
                               }}
-                              className={`p-1 rounded transition ${isAdmin ? 'text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950' : 'text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950'}`}
-                              title={isAdmin ? "تغییر رمز عبور مدیر با تایید پیامکی (OTP)" : "تغییر سریع رمز عبور"}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-amber-50 dark:bg-slate-800 dark:hover:bg-amber-950/50 text-slate-700 hover:text-amber-700 dark:text-slate-300 dark:hover:text-amber-300 font-bold text-[11px] border border-slate-200 dark:border-slate-700 transition cursor-pointer"
+                              title={isAdmin ? "تغییر رمز عبور مدیر از طریق تایید دو مرحله‌ای (SMS OTP)" : "بازنشانی و مدیریت رمز عبور این کاربر"}
                             >
-                              <KeyRound className="w-3.5 h-3.5" />
+                              <KeyRound className="w-3.5 h-3.5 text-amber-500" />
+                              <span>تغییر رمز</span>
                             </button>
+
+                            {p.mustChangePassword ? (
+                              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold flex items-center gap-0.5">
+                                <AlertTriangle className="w-3 h-3" />
+                                الزام به تغییر رمز
+                              </span>
+                            ) : (
+                              <span className="text-[9px] text-slate-400 font-mono">
+                                هضم ایمن (scrypt)
+                              </span>
+                            )}
                           </div>
                         </td>
 
-                        {/* Status */}
-                        <td className="p-3.5">
-                          <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold text-[11px] bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
-                            <CheckCircle2 className="w-3 h-3" />
-                            فعال
-                          </span>
-                        </td>
-
                         {/* Actions */}
-                        <td className="p-3.5">
+                        <td className="p-4">
                           <div className="flex items-center justify-center gap-1.5">
                             {/* QR Voucher View */}
                             <button
@@ -2344,65 +2494,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   password: p.password
                                 });
                               }}
-                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition"
-                              title="مشاهده و چاپ کارت ورود و کد QR"
+                              className="p-2 rounded-xl bg-slate-100 hover:bg-blue-50 dark:bg-slate-800 dark:hover:bg-blue-950/60 text-slate-700 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 transition cursor-pointer"
+                              title="مشاهده و چاپ کارت ورود هوشمند و کد QR"
                             >
-                              <QrCode className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                              <QrCode className="w-4 h-4" />
                             </button>
 
-                            {/* Edit Profile - ONLY FOR NON-ADMINS */}
+                            {/* Edit Profile */}
                             {!isAdmin ? (
                               <button
                                 onClick={() => {
                                   setEditingUser(JSON.parse(JSON.stringify(p)));
+                                  setEditUserError(null);
                                 }}
-                                className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 transition"
-                                title="ویرایش مشخصات کاربر"
+                                className="p-2 rounded-xl bg-slate-100 hover:bg-emerald-50 dark:bg-slate-800 dark:hover:bg-emerald-950/60 text-slate-700 hover:text-emerald-600 dark:text-slate-300 dark:hover:text-emerald-400 transition cursor-pointer"
+                                title="ویرایش اطلاعات کاربر"
                               >
                                 <Pencil className="w-4 h-4" />
                               </button>
                             ) : (
                               <span
-                                className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800/60 text-slate-400 cursor-not-allowed opacity-60"
-                                title="مشخصات پروفایل مدیر ارشد ثابت و غیرقابل ویرایش مستقیم است"
+                                className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800/40 text-slate-400 cursor-not-allowed opacity-50"
+                                title="مشخصات مدیر ارشد ثابت و حفاظت‌شده است"
                               >
                                 <ShieldCheck className="w-4 h-4 text-purple-400" />
                               </span>
                             )}
 
-                            {/* Reset Password */}
-                            <button
-                              onClick={() => {
-                                if (isAdmin) {
-                                  setShowAdminSmsPasswordModal(true);
-                                } else {
-                                  setPasswordResetUser(p);
-                                  setNewPasswordValue(p.password || '');
-                                }
-                              }}
-                              className={`p-1.5 rounded-lg transition ${isAdmin ? 'bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-600 dark:text-purple-400' : 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 text-amber-600 dark:text-amber-400'}`}
-                              title={isAdmin ? "تغییر رمز عبور مدیر از طریق تایید پیامکی (OTP)" : "تغییر کلمه عبور"}
-                            >
-                              <KeyRound className="w-4 h-4" />
-                            </button>
-
                             {/* Delete User */}
-                            {!isAdmin && (
+                            {!isAdmin ? (
                               <button
-                                onClick={() => {
-                                  if (confirm(`آیا از حذف حساب کاربری "${displayName}" اطمینان دارید؟`)) {
-                                    labDb.deleteProfile(p.id);
-                                    setProfiles(labDb.getProfiles());
-                                    setSuccessMessage(`حساب کاربری "${displayName}" با موفقیت حذف شد.`);
-                                    setTimeout(() => setSuccessMessage(null), 3500);
-                                  }
-                                }}
-                                className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 transition"
-                                title="حذف کاربر"
+                                onClick={() => setUserToDeleteConfirm(p)}
+                                className="p-2 rounded-xl bg-slate-100 hover:bg-rose-50 dark:bg-slate-800 dark:hover:bg-rose-950/60 text-slate-700 hover:text-rose-600 dark:text-slate-300 dark:hover:text-rose-400 transition cursor-pointer"
+                                title="حذف کاربر از سیستم"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
-                            )}
+                            ) : null}
                           </div>
                         </td>
                       </tr>
@@ -2410,6 +2538,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   })}
                 </tbody>
               </table>
+
+              {profiles.filter(p => {
+                if (!p) return false;
+                if (userRoleFilter === 'staff') return p.role === 'admin' || p.role === 'operator';
+                if (userRoleFilter === 'customer') return p.role === 'customer';
+                if (userRoleFilter === 'inactive') return p.status === 'inactive';
+                return true;
+              }).length === 0 && (
+                <div className="p-12 text-center space-y-2">
+                  <Users className="w-10 h-10 text-slate-300 dark:text-slate-700 mx-auto" />
+                  <p className="text-sm font-bold text-slate-600 dark:text-slate-400">
+                    هیچ کاربری با فیلترها و عبارت جستجوی جاری یافت نشد.
+                  </p>
+                  <button
+                    onClick={() => { setUserRoleFilter('all'); setUserSearch(''); }}
+                    className="text-xs text-blue-600 dark:text-blue-400 font-bold hover:underline cursor-pointer"
+                  >
+                    نمایش تمام کاربران
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -3234,31 +3383,98 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Pencil className="w-4 h-4 text-blue-600" />
-                <span>ویرایش حساب کاربری</span>
+                <span>ویرایش اطلاعات و دسترسی حساب کاربری</span>
               </h3>
-              <button onClick={() => setEditingUser(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+              <button 
+                onClick={() => { setEditingUser(null); setEditUserError(null); }} 
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer text-base"
+              >
+                ✕
+              </button>
             </div>
+
+            {editUserError && (
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/50 rounded-xl border border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>{editUserError}</span>
+              </div>
+            )}
 
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
-                if (editingUser.id === 'usr-admin-01' || editingUser.username === 'admin') {
-                  editingUser.role = 'admin';
-                } else if (editingUser.role === 'admin') {
-                  editingUser.role = 'operator';
+                setEditUserError(null);
+                setIsSubmittingEditUser(true);
+                try {
+                  // Role integrity protection
+                  if (editingUser.id === 'usr-admin-01' || editingUser.username === 'admin') {
+                    editingUser.role = 'admin';
+                    editingUser.status = 'active';
+                  }
+                  await labDb.updateProfile(editingUser);
+                  setProfiles(labDb.getProfiles());
+                  if (currentUser.id === editingUser.id) {
+                    if (editingUser.role) currentUser.role = editingUser.role;
+                  }
+                  setSuccessMessage(`مشخصات کاربر «${editingUser.fullName}» با موفقیت ذخیره شد.`);
+                  setTimeout(() => setSuccessMessage(null), 3500);
+                  setEditingUser(null);
+                } catch (err: any) {
+                  setEditUserError(err?.message || 'خطا در ذخیره تغییرات کاربر در سرور.');
+                } finally {
+                  setIsSubmittingEditUser(false);
                 }
-                await labDb.updateProfile(editingUser);
-                setProfiles(labDb.getProfiles());
-                if (currentUser.id === editingUser.id) {
-                  if (editingUser.password) currentUser.password = editingUser.password;
-                  if (editingUser.role) currentUser.role = editingUser.role;
-                }
-                setSuccessMessage(`مشخصات و نقش کاربر "${editingUser.fullName}" با موفقیت ذخیره و در تمامی دستگاه‌ها اعمال شد.`);
-                setTimeout(() => setSuccessMessage(null), 3500);
-                setEditingUser(null);
               }}
-              className="space-y-3 text-xs"
+              className="space-y-3.5 text-xs"
             >
+              {/* Role Display Card (Immutable Role Protection) */}
+              <div>
+                <label className="block font-bold mb-1 text-slate-700 dark:text-slate-300">نقش سازمانی و رده دسترسی</label>
+                {editingUser.id === 'usr-admin-01' || editingUser.username === 'admin' ? (
+                  <div className="p-3 rounded-2xl bg-purple-50 dark:bg-purple-950/50 border border-purple-200 dark:border-purple-800 text-purple-800 dark:text-purple-300">
+                    <div className="flex items-center justify-between font-bold text-xs">
+                      <span className="flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4 text-purple-600" />
+                        مدیر ارشد سامانه (حساب واحد و یکتا)
+                      </span>
+                      <span className="text-[10px] bg-purple-200/60 dark:bg-purple-900/60 px-2 py-0.5 rounded-full font-bold">ثابت و حفاظت‌شده</span>
+                    </div>
+                  </div>
+                ) : editingUser.role === 'operator' ? (
+                  <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300">
+                    <div className="flex items-center justify-between font-bold text-xs">
+                      <span className="flex items-center gap-1.5">
+                        <FlaskConical className="w-4 h-4 text-emerald-600" />
+                        اپراتور و تکنسین فنی آزمایشگاه بتن
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-200/60 dark:bg-emerald-900/60 px-2 py-0.5 rounded-full font-bold">
+                        <Lock className="w-3 h-3" />
+                        نقش ثابت فنی
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-emerald-700/90 dark:text-emerald-400/90 mt-1.5 leading-relaxed">
+                      به دلایل امنیت داده‌ها و استانداردهای آزمایشگاهی، نقش پرسنل فنی ثابت بوده و امکان تبدیل آن به مشتری وجود ندارد.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-300">
+                    <div className="flex items-center justify-between font-bold text-xs">
+                      <span className="flex items-center gap-1.5">
+                        <Building2 className="w-4 h-4 text-blue-600" />
+                        کارفرما و مشتری پرتال
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[10px] bg-blue-200/60 dark:bg-blue-900/60 px-2 py-0.5 rounded-full font-bold">
+                        <Lock className="w-3 h-3" />
+                        مشتری متصل
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-blue-700/90 dark:text-blue-400/90 mt-1.5 leading-relaxed">
+                      این حساب جهت کارفرمایان و مشاهده نتایج شیت‌ها ایجاد شده و به پرسنل فنی تبدیل نمی‌شود.
+                    </p>
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="block font-bold mb-1">نام و نام خانوادگی *</label>
                 <input
@@ -3270,28 +3486,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 />
               </div>
 
-              <div>
-                <label className="block font-bold mb-1">نام کاربری (کد ورود) *</label>
-                <input
-                  type="text"
-                  required
-                  value={editingUser.username || ''}
-                  onChange={(e) => setEditingUser({ ...editingUser, username: e.target.value })}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono"
-                  dir="ltr"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold mb-1">کلمه عبور (Password)</label>
-                <input
-                  type="text"
-                  value={editingUser.password || ''}
-                  onChange={(e) => setEditingUser({ ...editingUser, password: e.target.value })}
-                  placeholder="کلمه عبور دلخواه کاربر..."
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono font-bold text-amber-600 dark:text-amber-400"
-                  dir="ltr"
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold mb-1">نام کاربری (کد ورود) *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingUser.username || ''}
+                    disabled={editingUser.id === 'usr-admin-01' || editingUser.username === 'admin'}
+                    onChange={(e) => setEditingUser({ ...editingUser, username: e.target.value.trim() })}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono disabled:opacity-60"
+                    dir="ltr"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold mb-1">وضعیت حساب</label>
+                  <select
+                    value={editingUser.status || 'active'}
+                    disabled={editingUser.id === 'usr-admin-01' || editingUser.username === 'admin'}
+                    onChange={(e) => setEditingUser({ ...editingUser, status: e.target.value as 'active' | 'inactive' })}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold disabled:opacity-60"
+                  >
+                    <option value="active">فعال (مجوز ورود دارد)</option>
+                    <option value="inactive">معلق / غیرفعال (مسدود موقت)</option>
+                  </select>
+                </div>
               </div>
 
               <div>
@@ -3300,7 +3519,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   type="email"
                   required
                   value={editingUser.email}
-                  onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
+                  onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value.trim() })}
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono"
                   dir="ltr"
                 />
@@ -3311,42 +3530,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <input
                   type="text"
                   value={editingUser.phone || ''}
-                  onChange={(e) => setEditingUser({ ...editingUser, phone: e.target.value })}
+                  onChange={(e) => setEditingUser({ ...editingUser, phone: e.target.value.trim() })}
+                  placeholder="0913..."
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono"
                   dir="ltr"
                 />
               </div>
 
-              <div>
-                <label className="block font-bold mb-1">نقش و سطح دسترسی</label>
-                {(editingUser.id === 'usr-admin-01' || editingUser.username === 'admin') ? (
-                  <div className="p-2.5 rounded-xl bg-purple-50 dark:bg-purple-950/50 border border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300 font-bold text-xs flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <ShieldCheck className="w-4 h-4 text-purple-600" />
-                      مدیر ارشد سامانه (حساب واحد و یکتا)
-                    </span>
-                    <span className="text-[10px] bg-purple-200/60 dark:bg-purple-900/60 px-2 py-0.5 rounded-md">ثابت و غیرقابل تغییر</span>
-                  </div>
-                ) : (
-                  <div>
-                    <select
-                      value={editingUser.role}
-                      onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as any })}
-                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold"
-                    >
-                      <option value="operator">اپراتور / تکنسین آزمایشگاه بتن</option>
-                      <option value="customer">مشتری / کارفرما (مشاهده نتایج و سوابق)</option>
-                    </select>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1">
-                      🛡️ دسترسی مدیریت آزمایشگاه کاملاً اختصاصی و ثابت بوده و به کاربران دیگر اعطا نمی‌شود.
-                    </span>
-                  </div>
-                )}
-              </div>
-
               {editingUser.role === 'customer' && (
                 <div>
-                  <label className="block font-bold mb-1">شرکت متصل به حساب</label>
+                  <label className="block font-bold mb-1">شرکت و کارفرمای متصل</label>
                   <select
                     value={editingUser.customerId || ''}
                     onChange={(e) => setEditingUser({ ...editingUser, customerId: e.target.value })}
@@ -3365,16 +3558,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setEditingUser(null)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold"
+                  disabled={isSubmittingEditUser}
+                  onClick={() => { setEditingUser(null); setEditUserError(null); }}
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold cursor-pointer disabled:opacity-50"
                 >
                   انصراف
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md"
+                  disabled={isSubmittingEditUser}
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  ذخیره تغییرات کاربر
+                  {isSubmittingEditUser && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                  <span>{isSubmittingEditUser ? 'در حال ذخیره...' : 'ذخیره تغییرات'}</span>
                 </button>
               </div>
             </form>
@@ -3383,86 +3579,149 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL: RESET / CHANGE PASSWORD                                            */}
+      {/* MODAL: RESET / CHANGE PASSWORD (SECURITY OVERHAUL)                        */}
       {/* ========================================================================= */}
       {passwordResetUser && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <KeyRound className="w-4 h-4 text-amber-500" />
-                <span>تغییر رمز عبور کاربر</span>
+                <span>تغییر و بازنشانی رمز عبور کاربر</span>
               </h3>
-              <button onClick={() => setPasswordResetUser(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+              <button 
+                onClick={() => setPasswordResetUser(null)} 
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer text-base"
+              >
+                ✕
+              </button>
             </div>
 
-            <div className="bg-amber-50 dark:bg-amber-950/40 p-3 rounded-2xl border border-amber-200 dark:border-amber-800/60">
-              <span className="text-[11px] text-amber-800 dark:text-amber-300 block">
-                تغییر کلمه عبور برای: <strong>{passwordResetUser.fullName}</strong>
-              </span>
-              <span className="text-[10px] font-mono text-amber-600 dark:text-amber-400 block mt-0.5" dir="ltr">
-                {passwordResetUser.email}
-              </span>
+            <div className="bg-amber-50 dark:bg-amber-950/40 p-3.5 rounded-2xl border border-amber-200 dark:border-amber-800/60 space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-amber-800 dark:text-amber-300 font-bold">
+                  کاربر: {passwordResetUser.fullName}
+                </span>
+                <span className="text-[10px] bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-full font-mono font-bold" dir="ltr">
+                  {passwordResetUser.username || passwordResetUser.email}
+                </span>
+              </div>
+              <p className="text-[10px] text-amber-700/90 dark:text-amber-400/90">
+                رمز عبور جدید بلافاصله با الگوریتم امنیتی scrypt در سرور مرکزی رمزنگاری شده و نشست‌های قبلی جهت امنیت باطل می‌گردند.
+              </p>
             </div>
 
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
-                if (!newPasswordValue.trim()) return;
-                const newPass = newPasswordValue.trim();
-                const ok = await labDb.updateUserPassword(passwordResetUser.id, newPass);
-                if (ok) {
-                  const latestProfiles = labDb.getProfiles();
-                  setProfiles(latestProfiles);
-                  // FIX: do NOT mirror the plaintext password into the live
-                  // currentUser object — it would leak into localStorage and
-                  // any state serialization. The server holds the credential.
-                  setSuccessMessage(`رمز عبور کاربر "${passwordResetUser.fullName}" با موفقیت تغییر یافت و در تمامی دستگاه‌ها اعمال گردید.`);
-                  setTimeout(() => setSuccessMessage(null), 4000);
-                  setPasswordResetUser(null);
-                } else {
-                  const serverErr = (labDb as any).lastWriteError as string | null;
-                  setSuccessMessage(serverErr || 'تغییر رمز عبور در سرور ناموفق بود. لطفاً مجدداً تلاش کنید.');
+                const cleanPass = newPasswordValue.trim();
+                if (cleanPass.length < 8) {
+                  setErrorMessage('رمز عبور باید حداقل ۸ کاراکتر باشد.');
+                  setTimeout(() => setErrorMessage(null), 3500);
+                  return;
+                }
+                setIsSubmittingPasswordReset(true);
+                try {
+                  const ok = await labDb.updateUserPassword(
+                    passwordResetUser.id, 
+                    cleanPass, 
+                    undefined, 
+                    resetForceMustChange
+                  );
+                  if (ok) {
+                    setProfiles(labDb.getProfiles());
+                    setSuccessMessage(`رمز عبور کاربر «${passwordResetUser.fullName}» با موفقیت تغییر یافت.`);
+                    setTimeout(() => setSuccessMessage(null), 4000);
+                    setPasswordResetUser(null);
+                  } else {
+                    const serverErr = (labDb as any).lastWriteError as string | null;
+                    setErrorMessage(serverErr || 'تغییر رمز عبور در سرور ناموفق بود.');
+                    setTimeout(() => setErrorMessage(null), 4000);
+                  }
+                } catch (err: any) {
+                  setErrorMessage(err?.message || 'خطا در برقراری ارتباط با سرور.');
+                  setTimeout(() => setErrorMessage(null), 4000);
+                } finally {
+                  setIsSubmittingPasswordReset(false);
                 }
               }}
-              className="space-y-3 text-xs"
+              className="space-y-4 text-xs"
             >
               <div>
-                <label className="block font-bold mb-1">کلمه عبور جدید *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-slate-800 dark:text-slate-200">کلمه عبور جدید *</label>
+                  <button
+                    type="button"
+                    onClick={() => setNewPasswordValue(generateRandomPassword())}
+                    className="text-[11px] text-blue-600 dark:text-blue-400 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>تولید رمز قوی تصادفی</span>
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <input
+                    type={showResetPasswordPlain ? "text" : "password"}
+                    required
+                    minLength={8}
+                    value={newPasswordValue}
+                    onChange={(e) => setNewPasswordValue(e.target.value)}
+                    placeholder="حداقل ۸ کاراکتر..."
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2.5 pe-10 text-xs font-mono font-bold text-amber-600 dark:text-amber-400"
+                    dir="ltr"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPasswordPlain(!showResetPasswordPlain)}
+                    className="absolute end-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    title={showResetPasswordPlain ? "مخفی‌سازی رمز" : "نمایش رمز"}
+                  >
+                    {showResetPasswordPlain ? <Eye className="w-4 h-4 text-amber-600" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1">
+                  <span>طول: {newPasswordValue.length} کاراکتر</span>
+                  <span className={newPasswordValue.length >= 8 ? 'text-emerald-500 font-bold' : 'text-rose-500 font-bold'}>
+                    {newPasswordValue.length >= 8 ? '✓ طول مجاز' : '✗ حداقل ۸ کاراکتر'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Force Password Change Checkbox */}
+              <label className="flex items-start gap-2.5 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 cursor-pointer select-none">
                 <input
-                  type="text"
-                  required
-                  value={newPasswordValue}
-                  onChange={(e) => setNewPasswordValue(e.target.value)}
-                  placeholder="رمز عبور دلخواه را وارد کنید..."
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-mono font-bold text-amber-600 dark:text-amber-400"
-                  dir="ltr"
+                  type="checkbox"
+                  checked={resetForceMustChange}
+                  onChange={(e) => setResetForceMustChange(e.target.checked)}
+                  className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4 mt-0.5"
                 />
-              </div>
+                <div className="text-[11px] leading-relaxed">
+                  <strong className="text-slate-800 dark:text-slate-200 block font-bold">
+                    اجبار کاربر به تغییر رمز عبور در ورود بعدی (پیشنهاد امنیتی)
+                  </strong>
+                  <span className="text-slate-500 dark:text-slate-400 text-[10px]">
+                    کاربر پس از ورود با این رمز موقت، ملزم به تعیین رمز عبور اختصاصی خود در پرتال خواهد شد.
+                  </span>
+                </div>
+              </label>
 
-              <div className="flex gap-1.5">
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setNewPasswordValue('azma' + Math.floor(1000 + Math.random() * 9000))}
-                  className="text-[10px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold"
-                >
-                  تولید رمز تصادفی
-                </button>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
+                  disabled={isSubmittingPasswordReset}
                   onClick={() => setPasswordResetUser(null)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold"
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold cursor-pointer disabled:opacity-50"
                 >
                   انصراف
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-md"
+                  disabled={isSubmittingPasswordReset}
+                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  ثبت رمز جدید
+                  {isSubmittingPasswordReset && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                  <span>{isSubmittingPasswordReset ? 'در حال ثبت...' : 'ثبت رمز عبور جدید'}</span>
                 </button>
               </div>
             </form>
@@ -3471,7 +3730,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL: CREATE NEW USER                                                    */}
+      {/* MODAL: CREATE NEW TECHNICAL OPERATOR USER                                  */}
       {/* ========================================================================= */}
       {showNewUserModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -3479,19 +3738,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-blue-600" />
-                <span>تعریف کاربر جدید در سامانه</span>
+                <span>تعریف اپراتور / تکنسین فنی جدید</span>
               </h3>
-              <button onClick={() => setShowNewUserModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+              <button 
+                onClick={() => { setShowNewUserModal(false); setNewUserError(null); }} 
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer text-base"
+              >
+                ✕
+              </button>
             </div>
 
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 setNewUserError(null);
-                if ((newUserData.role as string) === 'admin') {
-                  setNewUserError('تعریف مدیر جدید مجاز نمی‌باشد. این سیستم دارای یک مدیر ارشد واحد است.');
-                  return;
-                }
                 const cleanPassword = (newUserData.password || '').trim();
                 if (cleanPassword.length < 8) {
                   setNewUserError('رمز عبور باید حداقل ۸ کاراکتر باشد.');
@@ -3515,6 +3775,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     role: 'operator',
                     status: 'active',
                     password: cleanPassword,
+                    mustChangePassword: newUserForceChange,
                     createdAt: new Date().toISOString()
                   });
                   setShowNewUserModal(false);
@@ -3530,13 +3791,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               }}
               className="space-y-3 text-xs"
             >
-              <div className="p-3 bg-blue-50/70 dark:bg-blue-950/40 rounded-2xl border border-blue-200/70 dark:border-blue-800/50 text-[11px] text-blue-800 dark:text-blue-300 leading-relaxed">
-                <strong>توجه:</strong> ایجاد حساب کاربری مشتریان و کارفرمایان صرفاً پس از تشکیل و ثبت قرارداد در بخش قراردادها به صورت خودکار انجام می‌پذیرد. این بخش منحصراً جهت تعریف اپراتورها و تکنسین‌های آزمایشگاه بتن می‌باشد.
+              <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200/70 dark:border-emerald-800/50 text-[11px] text-emerald-800 dark:text-emerald-300 leading-relaxed space-y-1">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <span>ثبت در رده پرسنل فنی آزمایشگاه بتن (Operator)</span>
+                </div>
+                <p>
+                  نقش کاربر ایجادشده در این فرم به عنوان <strong>اپراتور فنی</strong> تثبیت می‌گردد. (حساب کارفرمایان به صورت خودکار با ثبت قرارداد تعریف می‌شود).
+                </p>
               </div>
 
               {newUserError && (
                 <div className="p-3 bg-rose-50 dark:bg-rose-950/50 rounded-xl border border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center gap-2">
-                  <span className="shrink-0 text-base">⚠️</span>
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
                   <span>{newUserError}</span>
                 </div>
               )}
@@ -3564,7 +3831,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     required
                     value={newUserData.username}
                     onChange={(e) => {
-                      setNewUserData({ ...newUserData, username: e.target.value });
+                      setNewUserData({ ...newUserData, username: e.target.value.trim() });
                       if (newUserError) setNewUserError(null);
                     }}
                     placeholder="مثلا: reza_m"
@@ -3573,14 +3840,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold mb-1">کلمه عبور *</label>
+                  <label className="block font-bold mb-1">کلمه عبور اولیه *</label>
                   <input
                     type="text"
                     required
                     minLength={8}
                     value={newUserData.password}
                     onChange={(e) => {
-                      setNewUserData({ ...newUserData, password: e.target.value });
+                      setNewUserData({ ...newUserData, password: e.target.value.trim() });
                       if (newUserError) setNewUserError(null);
                     }}
                     placeholder="حداقل ۸ کاراکتر"
@@ -3591,16 +3858,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               <div>
-                <label className="block font-bold mb-1">ایمیل *</label>
+                <label className="block font-bold mb-1">ایمیل پرسنلی *</label>
                 <input
                   type="email"
                   required
                   value={newUserData.email}
                   onChange={(e) => {
-                    setNewUserData({ ...newUserData, email: e.target.value });
+                    setNewUserData({ ...newUserData, email: e.target.value.trim() });
                     if (newUserError) setNewUserError(null);
                   }}
-                  placeholder="user@example.com"
+                  placeholder="operator@lab.ir"
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono"
                   dir="ltr"
                 />
@@ -3612,7 +3879,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   type="text"
                   value={newUserData.phone}
                   onChange={(e) => {
-                    setNewUserData({ ...newUserData, phone: e.target.value });
+                    setNewUserData({ ...newUserData, phone: e.target.value.trim() });
                     if (newUserError) setNewUserError(null);
                   }}
                   placeholder="0913..."
@@ -3621,19 +3888,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 />
               </div>
 
-              <div>
-                <label className="block font-bold mb-1">نقش و سطح دسترسی کاربر</label>
-                <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-bold flex items-center justify-between">
-                  <span>اپراتور و تکنسین آزمایشگاه بتن (Operator)</span>
-                  <span className="text-[10px] bg-emerald-200/60 dark:bg-emerald-900/60 px-2 py-0.5 rounded-md">دسترسی پرسنل فنی</span>
-                </div>
-              </div>
+              {/* Force Password Change Checkbox */}
+              <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={newUserForceChange}
+                  onChange={(e) => setNewUserForceChange(e.target.checked)}
+                  className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+                />
+                <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                  اجبار تکنسین به تغییر رمز عبور در اولین ورود به پرتال
+                </span>
+              </label>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
                   disabled={isSubmittingNewUser}
-                  onClick={() => setShowNewUserModal(false)}
+                  onClick={() => { setShowNewUserModal(false); setNewUserError(null); }}
                   className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold cursor-pointer disabled:opacity-50"
                 >
                   انصراف
@@ -3644,10 +3916,70 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                 >
                   {isSubmittingNewUser && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                  <span>{isSubmittingNewUser ? 'در حال ثبت...' : 'ایجاد حساب کاربری پرسنل'}</span>
+                  <span>{isSubmittingNewUser ? 'در حال ثبت...' : 'ایجاد حساب اپراتور'}</span>
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: USER DELETE CONFIRMATION DIALOG                                    */}
+      {/* ========================================================================= */}
+      {userToDeleteConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-rose-200 dark:border-rose-900/60 p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 dark:bg-rose-950/60 flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  تایید حذف حساب کاربری
+                </h3>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  اقدام با پیامدهای امنیتی
+                </span>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-1.5 text-xs">
+              <div className="flex items-center justify-between font-bold text-slate-800 dark:text-slate-200">
+                <span>{userToDeleteConfirm.fullName || userToDeleteConfirm.username}</span>
+                <span className="text-[10px] font-mono text-slate-400" dir="ltr">{userToDeleteConfirm.id}</span>
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                نقش: {userToDeleteConfirm.role === 'operator' ? 'اپراتور فنی آزمایشگاه' : 'کارفرما / مشتری'}
+              </div>
+              <p className="text-[11px] text-rose-600 dark:text-rose-400 leading-relaxed pt-1">
+                ⚠️ با حذف این حساب، کلیه نشست‌های فعال و توکن‌های ورود کاربر در سرور بلافاصله ابطال خواهد شد.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setUserToDeleteConfirm(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const targetName = userToDeleteConfirm.fullName || userToDeleteConfirm.username;
+                  labDb.deleteProfile(userToDeleteConfirm.id);
+                  setProfiles(labDb.getProfiles());
+                  setUserToDeleteConfirm(null);
+                  setSuccessMessage(`حساب کاربری «${targetName}» با موفقیت حذف شد.`);
+                  setTimeout(() => setSuccessMessage(null), 3500);
+                }}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-md cursor-pointer"
+              >
+                حذف قطعی حساب
+              </button>
+            </div>
           </div>
         </div>
       )}

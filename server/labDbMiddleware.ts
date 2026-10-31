@@ -1007,7 +1007,8 @@ export async function handleLabDataApi(
           // replaced without proving the current one — UNLESS the stored
           // credential is already unusable (healed placeholder), in which case
           // there is nothing to prove against (see the FIX note above).
-          requireCurrentForNonAdmin: targetHasCredential
+          requireCurrentForNonAdmin: targetHasCredential,
+          forceMustChangePassword: Boolean(isAdmin) && payload.forceMustChangePassword === true
         })
       );
       if (result === 'wrong-current') {
