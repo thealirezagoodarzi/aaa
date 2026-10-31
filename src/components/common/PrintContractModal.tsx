@@ -187,10 +187,10 @@ export const PrintContractModal: React.FC<PrintContractModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/75 backdrop-blur-sm print:bg-white print:p-0 print:block animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/75 backdrop-blur-sm print:static print:inset-auto print:z-auto print:block print:bg-white print:p-0 print:overflow-visible print:h-auto animate-fadeIn">
       
       {/* Container Box */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-5xl w-full p-4 sm:p-6 overflow-y-auto max-h-[95vh] print:max-h-none print:shadow-none print:border-none print:rounded-none print:w-full print:p-0">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-5xl w-full p-4 sm:p-6 overflow-y-auto max-h-[95vh] print:static print:max-h-none print:h-auto print:overflow-visible print:shadow-none print:border-none print:rounded-none print:w-full print:p-0">
         
         {/* ========================================================================= */}
         {/* Top Controls Toolbar - STRICTLY HIDDEN IN PRINT                          */}
@@ -256,16 +256,16 @@ export const PrintContractModal: React.FC<PrintContractModalProps> = ({
               </button>
             )}
 
-            {/* Real PDF Download Button - Available for BOTH Admin and Customer */}
+            {/* Single Unified PDF & Print Button */}
             <button
               type="button"
               onClick={handleDownloadPdf}
               disabled={isGeneratingPdf}
-              className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-rose-600/20 active:scale-95 cursor-pointer"
-              title="دانلود فایل واقعی PDF قرارداد دو صفحه‌ای"
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-rose-600/20 active:scale-95 cursor-pointer"
+              title="چاپ و دانلود مستقیم فایل PDF رسمی قرارداد دو صفحه‌ای"
             >
               <FileDown className="w-4 h-4" />
-              <span>{isGeneratingPdf ? 'در حال تولید PDF...' : 'دانلود فایل PDF'}</span>
+              <span>{isGeneratingPdf ? 'در حال ایجاد فایل PDF (۲ صفحه)...' : 'چاپ و دانلود قرارداد (PDF / A4)'}</span>
             </button>
 
             {/* Real Word (.docx) Download Button - ONLY FOR LAB ADMIN / STAFF (HIDDEN FOR CUSTOMER) */}
@@ -281,16 +281,6 @@ export const PrintContractModal: React.FC<PrintContractModalProps> = ({
                 <span>{isGeneratingDocx ? 'در حال ایجاد فایل ورد...' : 'خروجی Word (.docx)'}</span>
               </button>
             )}
-
-            {/* Print Button */}
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
-            >
-              <Printer className="w-4 h-4" />
-              <span>چاپ رسمی (A4)</span>
-            </button>
 
             {/* Close Button */}
             <button
@@ -676,8 +666,8 @@ export const PrintContractModal: React.FC<PrintContractModalProps> = ({
               fontSize === 'compact' ? 'text-[12px] leading-[1.8]' : fontSize === 'large' ? 'text-[14px] leading-[2.1]' : 'text-[13px] leading-[1.95]'
             }`}
             style={{ 
-              pageBreakAfter: 'always', 
-              breakAfter: 'page',
+              pageBreakAfter: 'auto', 
+              breakAfter: 'auto',
               boxSizing: 'border-box' 
             }}
           >

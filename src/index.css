@@ -104,19 +104,76 @@
 @media print {
   @page {
     size: A4 portrait;
-    margin: 8mm;
+    margin: 6mm 8mm;
   }
+
+  html, body, #root {
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: static !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  /* Reset all fixed overlays and scrolling containers so multi-page documents print all pages */
+  .fixed,
+  [class*="fixed"],
+  .overflow-y-auto,
+  [class*="overflow-y-auto"],
+  .max-h-\[95vh\] {
+    position: static !important;
+    inset: auto !important;
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+    width: 100% !important;
+    box-shadow: none !important;
+  }
+
   .contract-page-wrapper {
     background: #ffffff !important;
     padding: 0 !important;
     margin: 0 !important;
+    display: block !important;
+    overflow: visible !important;
+    height: auto !important;
   }
+
+  .contract-page {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    overflow: visible !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    min-height: 272mm !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  /* Force clean page break AFTER Page 1 */
+  .contract-page:first-of-type,
+  .contract-page:first-child {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  /* Prevent blank page after Page 2 */
+  .contract-page:last-of-type,
+  .contract-page:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
   .contract-bordered-page {
     border: 2px solid #000000 !important;
-    padding: 10mm 12mm !important;
-    min-height: 275mm !important;
-    max-height: 280mm !important;
+    padding: 8mm 10mm !important;
     box-sizing: border-box !important;
   }
 }
+
 
