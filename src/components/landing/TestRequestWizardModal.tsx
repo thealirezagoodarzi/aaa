@@ -66,14 +66,15 @@ export const TestRequestWizardModal: React.FC<TestRequestWizardModalProps> = ({
       const newDispatch = labDb.addDispatch({
         customerId: uniqueId('lead'),
         customerName: cleanName,
-        projectName: 'درخواست آنلاین آزمایشگاه',
+        projectName: 'درخواست تماس و مشاوره وب‌سایت',
         projectAddress: 'هماهنگی تلفنی با متقاضی',
         contactPhone: cleanPhone,
         scheduledDateJalali: todayJalali,
         scheduledTime: nowTime,
-        serviceType: 'درخواست مشاوره و اعزام تکنسین آزمایشگاه',
+        serviceType: 'درخواست تماس و مشاوره تلفنی (از وب‌سایت)',
+        requestCategory: 'contact_lead',
         status: 'requested',
-        notes: `درخواست ثبت‌شده از وب‌سایت • متقاضی: ${cleanName} • شماره تماس: ${cleanPhone} • ساعت: ${nowTime}`
+        notes: `درخواست تماس ثبت‌شده از وب‌سایت • متقاضی: ${cleanName} • شماره تماس: ${cleanPhone} • ساعت: ${nowTime}`
       });
 
       // 2. Notification SMS

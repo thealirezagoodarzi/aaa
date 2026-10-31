@@ -106,16 +106,17 @@ export const TestRequestPage: React.FC<TestRequestPageProps> = ({
     try {
       const nowTime = new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
       
-      // صرفاً یک اعلان برای صفحه اپراتور در قالب رکورد دیسپچ ثبت می‌شود و هیچ‌گونه صفحه‌سازی یا اقدام دیگری صورت نمی‌گیرد
+      // صرفاً یک اعلان برای صفحه اپراتور در قالب رکورد درخواست تماس ثبت می‌شود
       labDb.addDispatch({
         customerId: uniqueId('lead'),
         customerName: cleanName,
-        projectName: 'درخواست آزمایش وب‌سایت',
+        projectName: 'درخواست تماس و مشاوره وب‌سایت',
         projectAddress: 'هماهنگی تلفنی با متقاضی',
         contactPhone: digitsOnly,
         scheduledDateJalali: todayJalali,
         scheduledTime: nowTime,
-        serviceType: 'درخواست آزمایش بتن (اعزام تکنسین و نمونه‌گیری)',
+        serviceType: 'درخواست تماس و مشاوره تلفنی (از وب‌سایت)',
+        requestCategory: 'contact_lead',
         status: 'requested',
         notes: `اعلان درخواست متقاضی از وب‌سایت • نام: ${cleanName} • تلفن: ${digitsOnly} • ساعت: ${nowTime}`
       });

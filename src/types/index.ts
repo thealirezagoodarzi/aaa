@@ -268,6 +268,7 @@ export interface TechnicianDispatch {
   scheduledTime: string;
   technicianName?: string;
   serviceType: string;
+  requestCategory?: 'contact_lead' | 'field_dispatch'; // Distinguish website callback leads from field technician dispatches
   status: 'requested' | 'assigned' | 'completed' | 'cancelled';
   notes?: string;
   createdAt: string;

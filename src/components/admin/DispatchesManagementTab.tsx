@@ -110,6 +110,7 @@ export const DispatchesManagementTab: React.FC = () => {
       scheduledTime,
       serviceType,
       technicianName: dispatchTechnician || undefined,
+      requestCategory: 'field_dispatch',
       status: dispatchTechnician ? 'assigned' : 'requested',
       notes: notes || undefined
     });

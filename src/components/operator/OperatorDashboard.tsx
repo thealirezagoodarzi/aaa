@@ -49,14 +49,16 @@ import { OperatorSettingsTab } from './OperatorSettingsTab';
 import { OperatorResultModal } from './OperatorResultModal';
 import { OperatorSamplesView } from './OperatorSamplesView';
 import { OperatorCustomersList } from './OperatorCustomersList';
-import { OperatorRequestsTab } from './OperatorRequestsTab';
+import { OperatorRequestsTab, isContactLead } from './OperatorRequestsTab';
 import { PhotoGalleryViewer } from '../common/PhotoGalleryViewer';
 import { PrintCertificate } from '../common/PrintCertificate';
 import { CompanyLogo } from '../common/CompanyLogo';
+import { navHistory } from '../../services/navigationHistory';
 import { 
   QrCode,
   Camera,
-  Truck
+  Truck,
+  ArrowLeft
 } from 'lucide-react';
 
 interface OperatorDashboardProps {
@@ -81,7 +83,38 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
   onToggleDarkMode
 }) => {
   const t = translations[language];
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'requests' | 'new_test' | 'samples' | 'tests' | 'customers' | 'reports' | 'gallery' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'requests' | 'new_test' | 'samples' | 'tests' | 'customers' | 'reports' | 'gallery' | 'settings'>(() => {
+    const curTab = navHistory.getCurrentTab();
+    if (curTab && ['dashboard', 'requests', 'new_test', 'samples', 'tests', 'customers', 'reports', 'gallery', 'settings'].includes(curTab)) {
+      return curTab as any;
+    }
+    return 'dashboard';
+  });
+
+  const handleTabChange = (newTab: typeof activeTab) => {
+    setActiveTab(newTab);
+    setMobileMenuOpen(false);
+    if (newTab !== 'dashboard') {
+      navHistory.navigateTab(newTab);
+    } else {
+      navHistory.navigateTab('dashboard');
+    }
+  };
+
+  useEffect(() => {
+    const unsubNav = navHistory.subscribeView((view, meta) => {
+      if (view === 'portal') {
+        const targetTab = meta?.tab as typeof activeTab | undefined;
+        if (targetTab && ['dashboard', 'requests', 'new_test', 'samples', 'tests', 'customers', 'reports', 'gallery', 'settings'].includes(targetTab)) {
+          setActiveTab(targetTab);
+        } else {
+          setActiveTab('dashboard');
+        }
+      }
+    });
+    return () => unsubNav();
+  }, []);
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -119,8 +152,13 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
     return () => unsub();
   }, []);
 
-  // Web test requests from landing page awaiting operator contact
-  const webRequests = dispatches.filter(d => d.status === 'requested');
+  // Separate website contact leads from field technician dispatches
+  const contactLeads = dispatches.filter(isContactLead);
+  const fieldDispatches = dispatches.filter(d => !isContactLead(d));
+
+  const pendingContactLeads = contactLeads.filter(d => d.status === 'requested');
+  const pendingFieldDispatches = fieldDispatches.filter(d => d.status === 'requested');
+  const webRequests = pendingContactLeads; // For backwards compatibility
 
   const todayJalali = formatJalali(getTodayJalali());
 
@@ -257,39 +295,43 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
         {/* Navigation Menu */}
         <nav className="flex-1 p-3.5 space-y-1.5 overflow-y-auto">
           <button 
-            onClick={() => { setActiveTab('dashboard'); setMobileMenuOpen(false); }}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'}`}
+            onClick={() => handleTabChange('dashboard')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'}`}
           >
             <LayoutDashboard className="w-4 h-4 shrink-0" />
             <span>پیشخوان و آمار سریع</span>
           </button>
 
           <button 
-            onClick={() => { setActiveTab('requests'); setMobileMenuOpen(false); }}
-            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition ${activeTab === 'requests' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'}`}
+            onClick={() => handleTabChange('requests')}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${activeTab === 'requests' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'}`}
           >
             <div className="flex items-center gap-3">
-              <Truck className="w-4 h-4 shrink-0" />
-              <span>درخواست‌های اعزام و آنلاین</span>
+              <ClipboardList className="w-4 h-4 shrink-0" />
+              <span>درخواست‌ها و تماس‌های سایت</span>
             </div>
-            {webRequests.length > 0 && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold bg-rose-500 text-white animate-pulse">
-                {toPersianDigits(webRequests.length)}
+            {pendingContactLeads.length > 0 ? (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold bg-emerald-500 text-white animate-pulse" title="شماره تماس جدید از وب‌سایت">
+                {toPersianDigits(pendingContactLeads.length)} تماس
               </span>
-            )}
+            ) : pendingFieldDispatches.length > 0 ? (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold bg-blue-500 text-white">
+                {toPersianDigits(pendingFieldDispatches.length)}
+              </span>
+            ) : null}
           </button>
 
           <button 
-            onClick={() => { setActiveTab('new_test'); setMobileMenuOpen(false); }}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition ${activeTab === 'new_test' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'}`}
+            onClick={() => handleTabChange('new_test')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${activeTab === 'new_test' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'}`}
           >
             <FlaskConical className="w-4 h-4 shrink-0" />
             <span>ثبت پذیرش نمونه بتن</span>
           </button>
 
           <button 
-            onClick={() => { setActiveTab('samples'); setMobileMenuOpen(false); }}
-            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition ${activeTab === 'samples' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'}`}
+            onClick={() => handleTabChange('samples')}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${activeTab === 'samples' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'}`}
           >
             <div className="flex items-center gap-3">
               <Boxes className="w-4 h-4 shrink-0" />
@@ -303,11 +345,11 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
           </button>
 
           <button 
-            onClick={() => { setActiveTab('tests'); setMobileMenuOpen(false); }}
-            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition ${activeTab === 'tests' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'}`}
+            onClick={() => handleTabChange('tests')}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${activeTab === 'tests' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'}`}
           >
             <div className="flex items-center gap-3">
-              <ClipboardList className="w-4 h-4 shrink-0" />
+              <Scale className="w-4 h-4 shrink-0" />
               <span>بانک آزمایش‌ها و شیت‌ها</span>
             </div>
             {pendingTests > 0 && (
@@ -318,8 +360,8 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
           </button>
 
           <button 
-            onClick={() => { setActiveTab('customers'); setMobileMenuOpen(false); }}
-            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition ${activeTab === 'customers' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'}`}
+            onClick={() => handleTabChange('customers')}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${activeTab === 'customers' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'}`}
           >
             <div className="flex items-center gap-3">
               <Users className="w-4 h-4 shrink-0" />
@@ -331,24 +373,24 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
           </button>
 
           <button 
-            onClick={() => { setActiveTab('reports'); setMobileMenuOpen(false); }}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition ${activeTab === 'reports' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'}`}
+            onClick={() => handleTabChange('reports')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${activeTab === 'reports' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'}`}
           >
             <FileText className="w-4 h-4 shrink-0" />
             <span>گزارشات و خروجی اکسل</span>
           </button>
 
           <button 
-            onClick={() => { setActiveTab('gallery'); setMobileMenuOpen(false); }}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition ${activeTab === 'gallery' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'}`}
+            onClick={() => handleTabChange('gallery')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${activeTab === 'gallery' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'}`}
           >
             <Camera className="w-4 h-4 shrink-0" />
             <span>گالری تصاویر بتن</span>
           </button>
 
           <button 
-            onClick={() => { setActiveTab('settings'); setMobileMenuOpen(false); }}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition ${activeTab === 'settings' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'}`}
+            onClick={() => handleTabChange('settings')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${activeTab === 'settings' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'}`}
           >
             <Settings className="w-4 h-4 shrink-0" />
             <span>تنظیمات و کالیبراسیون</span>
@@ -426,8 +468,8 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
             )}
 
             <button
-              onClick={() => setActiveTab('new_test')}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-xs transition"
+              onClick={() => handleTabChange('new_test')}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-xs transition cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>ثبت نمونه بتن</span>
@@ -437,7 +479,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
             {onToggleDarkMode && (
               <button 
                 onClick={onToggleDarkMode}
-                className="w-9 h-9 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                className="w-9 h-9 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
                 title="تغییر حالت شب و روز"
               >
                 {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
@@ -448,136 +490,228 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
             <div className="relative">
               <button
                 onClick={() => setShowNotifications(!showNotifications)}
-                className="w-9 h-9 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition relative"
+                className="w-9 h-9 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition relative cursor-pointer"
                 title="پیام‌ها و اعلان‌ها"
               >
                 <Bell className="w-4 h-4" />
-                {(webRequests.length > 0 || dueBreakSamples.length > 0) && (
+                {(pendingContactLeads.length > 0 || pendingFieldDispatches.length > 0 || dueBreakSamples.length > 0) && (
                   <span className="min-w-4 h-4 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold font-mono absolute -top-1 -right-1 flex items-center justify-center ring-2 ring-white dark:ring-slate-900 animate-pulse">
-                    {toPersianDigits(webRequests.length + dueBreakSamples.length)}
+                    {toPersianDigits(pendingContactLeads.length + pendingFieldDispatches.length + dueBreakSamples.length)}
                   </span>
                 )}
               </button>
 
-              {showNotifications && (
-                <div className="absolute left-0 mt-2 w-80 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-4 z-50 animate-fadeIn text-xs">
-                  <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-800 mb-2">
-                    <span className="font-bold text-slate-800 dark:text-slate-200">اعلان‌ها و رویدادهای آزمایشگاه</span>
-                    <span className="text-[10px] text-blue-600 font-bold">
-                      {toPersianDigits(webRequests.length + dueBreakSamples.length)} مورد فعال
-                    </span>
-                  </div>
-                  <div className="space-y-2.5 max-h-72 overflow-y-auto">
-                    {/* Due break notifications */}
-                    {dueBreakSamples.slice(0, 3).map(s => (
-                      <div 
-                        key={s.id} 
-                        onClick={() => {
-                          setSelectedForEntry(s);
-                          setShowNotifications(false);
-                        }}
-                        className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 cursor-pointer hover:bg-amber-100/60 transition space-y-1"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
-                            <Clock className="w-3.5 h-3.5 text-amber-600" />
-                            موعد آزمون شکست جک
-                          </span>
-                          <span className="font-mono text-[10px] text-blue-600 font-bold">{s.reportNo}</span>
-                        </div>
-                        <p className="text-[11px] text-slate-600 dark:text-slate-400">
-                          {s.projectName} ({s.concreteGrade} - {s.customerName})
-                        </p>
-                      </div>
-                    ))}
+            {showNotifications && (
+              <div className="absolute left-0 mt-2 w-88 bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-4 z-50 animate-fadeIn text-xs">
+                <div className="flex justify-between items-center pb-2.5 border-b border-slate-100 dark:border-slate-800 mb-2.5">
+                  <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <Bell className="w-3.5 h-3.5 text-blue-500" />
+                    <span>اعلان‌ها و رویدادهای آزمایشگاه</span>
+                  </span>
+                  <span className="text-[10px] text-blue-600 font-bold bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded-full">
+                    {toPersianDigits(pendingContactLeads.length + pendingFieldDispatches.length + dueBreakSamples.length)} مورد
+                  </span>
+                </div>
 
-                    {/* Web requests */}
-                    {webRequests.map(req => (
-                      <div key={req.id} className="p-3 rounded-xl bg-blue-50/90 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-900/60 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-blue-900 dark:text-sky-300 text-xs flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping inline-block" />
-                            درخواست تماس متقاضی بتن
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-mono">{req.scheduledTime}</span>
-                        </div>
-                        <div className="text-xs space-y-1 text-slate-700 dark:text-slate-300">
-                          <div><span className="text-slate-500 dark:text-slate-400">متقاضی: </span><span className="font-bold">{req.customerName}</span></div>
+                <div className="space-y-3 max-h-80 overflow-y-auto">
+                  {/* 1. Website Contact Leads */}
+                  {pendingContactLeads.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
+                        <span className="flex items-center gap-1">
+                          <Phone className="w-3 h-3 text-emerald-500" />
+                          <span>درخواست‌های تماس سایت ({toPersianDigits(pendingContactLeads.length)})</span>
+                        </span>
+                        <button
+                          onClick={() => {
+                            setShowNotifications(false);
+                            handleTabChange('requests');
+                          }}
+                          className="text-[10px] text-emerald-600 hover:underline cursor-pointer"
+                        >
+                          مشاهده همه
+                        </button>
+                      </div>
+
+                      {pendingContactLeads.slice(0, 3).map(req => (
+                        <div key={req.id} className="p-3 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 space-y-2">
                           <div className="flex items-center justify-between">
-                            <span><span className="text-slate-500 dark:text-slate-400">شماره: </span><span className="font-mono font-bold text-blue-600 dark:text-sky-400" dir="ltr">{req.contactPhone}</span></span>
+                            <span className="font-bold text-slate-900 dark:text-white truncate max-w-[130px]">{req.customerName}</span>
+                            <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono font-bold" dir="ltr">{req.contactPhone}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 pt-1 border-t border-emerald-200/50 dark:border-emerald-900/40">
                             <a 
                               href={`tel:${req.contactPhone}`} 
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] transition"
+                              className="flex-1 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] flex items-center justify-center gap-1 transition"
                             >
                               <Phone className="w-3 h-3" />
                               <span>تماس فوری</span>
                             </a>
+                            <button
+                              onClick={() => {
+                                labDb.updateDispatchStatus(req.id, 'assigned', currentUser.fullName);
+                                refreshData();
+                              }}
+                              className="flex-1 py-1.5 rounded-xl bg-slate-200/80 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[10px] flex items-center justify-center gap-1 transition cursor-pointer"
+                              title="ثبت تماس گرفته شد"
+                            >
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>پیگیری شد</span>
+                            </button>
                           </div>
                         </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* 2. Field Dispatches */}
+                  {pendingFieldDispatches.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-blue-700 dark:text-blue-400">
+                        <span className="flex items-center gap-1">
+                          <Truck className="w-3 h-3 text-blue-500" />
+                          <span>اعزام‌های تکنسین ({toPersianDigits(pendingFieldDispatches.length)})</span>
+                        </span>
                         <button
                           onClick={() => {
-                            labDb.updateDispatchStatus(req.id, 'assigned', currentUser.fullName);
-                            refreshData();
+                            setShowNotifications(false);
+                            handleTabChange('requests');
                           }}
-                          className="w-full text-center py-1 rounded-lg bg-slate-200/80 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-[10px] font-bold text-slate-700 dark:text-slate-300 transition"
+                          className="text-[10px] text-blue-600 hover:underline cursor-pointer"
                         >
-                          علامت‌گذاری به عنوان تماس گرفته شده
+                          مشاهده
                         </button>
                       </div>
-                    ))}
 
-                    <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                      <span className="font-bold text-slate-800 dark:text-slate-200 block">جک هیدرولیکی آزمایشگاه کالیبره است</span>
-                      <span className="text-slate-500 block text-[10px] mt-0.5">آماده دریافت و آزمون استاندارد نمونه‌ها</span>
+                      {pendingFieldDispatches.slice(0, 2).map(req => (
+                        <div key={req.id} className="p-3 rounded-2xl bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-slate-900 dark:text-white truncate max-w-[130px]">{req.projectName || req.customerName}</span>
+                            <span className="text-[10px] font-mono text-blue-600 dark:text-sky-400">{req.scheduledTime}</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 truncate">{req.projectAddress || req.customerName}</p>
+                        </div>
+                      ))}
                     </div>
-                  </div>
+                  )}
+
+                  {/* 3. Due Break Samples */}
+                  {dueBreakSamples.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="text-[11px] font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-amber-500" />
+                        <span>موعد آزمون شکست جک ({toPersianDigits(dueBreakSamples.length)})</span>
+                      </div>
+                      {dueBreakSamples.slice(0, 2).map(s => (
+                        <div 
+                          key={s.id} 
+                          onClick={() => {
+                            setSelectedForEntry(s);
+                            setShowNotifications(false);
+                          }}
+                          className="p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 cursor-pointer hover:bg-amber-100/60 transition space-y-1"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-amber-900 dark:text-amber-200 text-xs">
+                              {s.projectName}
+                            </span>
+                            <span className="font-mono text-[10px] text-blue-600 font-bold">{s.reportNo}</span>
+                          </div>
+                          <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                            عیار {s.concreteGrade} - {s.customerName}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {pendingContactLeads.length === 0 && pendingFieldDispatches.length === 0 && dueBreakSamples.length === 0 && (
+                    <div className="py-6 text-center text-slate-400 space-y-1">
+                      <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto" />
+                      <p className="text-xs font-bold text-slate-600 dark:text-slate-300">هیچ اعلان معوقی وجود ندارد</p>
+                      <p className="text-[10px]">همه درخواست‌های تماس و مأموریت‌ها رسیدگی شده‌اند.</p>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
+            )}
             </div>
           </div>
         </header>
 
         {/* Content Body */}
         <div className="flex-1 p-5 lg:p-7 overflow-y-auto">
+          {/* Top Breadcrumb & Return to Dashboard Button for sub-tabs */}
+          {activeTab !== 'dashboard' && (
+            <div className="mb-5 flex items-center justify-between bg-white dark:bg-slate-900 px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-300">
+                <button 
+                  onClick={() => handleTabChange('dashboard')}
+                  className="hover:text-blue-600 flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Home className="w-3.5 h-3.5 text-blue-500" />
+                  <span>پیشخوان اصلی اپراتور</span>
+                </button>
+                <span className="text-slate-400">/</span>
+                <span className="text-slate-900 dark:text-white font-black">
+                  {activeTab === 'requests' ? 'درخواست‌ها و تماس‌های سایت' :
+                   activeTab === 'new_test' ? 'ثبت پذیرش نمونه بتن تازه' :
+                   activeTab === 'samples' ? 'حوضچه کیورینگ و موعد شکست' :
+                   activeTab === 'tests' ? 'بانک آزمایش‌ها و شیت‌ها' :
+                   activeTab === 'customers' ? 'کارفرمایان و قراردادها' :
+                   activeTab === 'reports' ? 'شیت‌های پذیرش و خروجی اکسل' :
+                   activeTab === 'gallery' ? 'گالری تصاویر بتن' : 'تنظیمات'}
+                </span>
+              </div>
+              <button
+                onClick={() => handleTabChange('dashboard')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-xs font-bold transition cursor-pointer shadow-xs active:scale-95"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>بازگشت به پیشخوان اصلی</span>
+              </button>
+            </div>
+          )}
+
           {activeTab === 'dashboard' && (
             <div className="space-y-6">
               
-              {/* Web Test Requests Alert Banner */}
-              {webRequests.length > 0 && (
-                <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-700 via-indigo-700 to-slate-900 text-white shadow-lg space-y-3">
+              {/* 1. Website Consultation Leads Alert Banner */}
+              {pendingContactLeads.length > 0 && (
+                <div className="p-4 rounded-3xl bg-gradient-to-r from-emerald-800 via-teal-800 to-slate-900 text-white shadow-lg space-y-3 border border-emerald-600/30">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
-                        <Bell className="w-4 h-4 text-white animate-bounce" />
+                      <div className="w-9 h-9 rounded-2xl bg-white/20 flex items-center justify-center">
+                        <Phone className="w-4 h-4 text-white animate-bounce" />
                       </div>
                       <div>
                         <h3 className="font-bold text-sm">
-                          {toPersianDigits(webRequests.length)} درخواست آزمایش جدید از وب‌سایت
+                          {toPersianDigits(pendingContactLeads.length)} شماره تماس و درخواست مشاوره جدید از وب‌سایت
                         </h3>
-                        <p className="text-[11px] text-blue-100">
-                          اطلاعات متقاضیان جهت تماس تلفنی، هماهنگی اعزام تکنسین و صدور شیت
+                        <p className="text-[11px] text-emerald-100">
+                          متقاضیان شماره تماس خود را در صفحه اصلی جهت مشاوره، استعلام قیمت و هماهنگی آزمایش ثبت نموده‌اند
                         </p>
                       </div>
                     </div>
 
                     <button
-                      onClick={() => setActiveTab('requests')}
-                      className="px-3 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white font-bold text-xs flex items-center gap-1.5 transition self-start sm:self-auto cursor-pointer"
+                      onClick={() => handleTabChange('requests')}
+                      className="px-3.5 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white font-bold text-xs flex items-center gap-1.5 transition self-start sm:self-auto cursor-pointer"
                     >
-                      <Truck className="w-3.5 h-3.5" />
-                      <span>مدیریت کامل درخواست‌ها ({toPersianDigits(dispatches.length)})</span>
+                      <ClipboardList className="w-3.5 h-3.5" />
+                      <span>مدیریت تماس‌های سایت ({toPersianDigits(contactLeads.length)})</span>
                     </button>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
-                    {webRequests.map(req => (
+                    {pendingContactLeads.slice(0, 3).map(req => (
                       <div key={req.id} className="p-3.5 rounded-2xl bg-white/10 backdrop-blur-xs border border-white/20 text-xs space-y-2.5">
                         <div className="flex items-center justify-between">
                           <span className="font-bold text-white truncate max-w-[130px]">{req.customerName}</span>
-                          <span className="text-[10px] text-blue-200 font-mono">{req.scheduledDateJalali || todayJalali} - {req.scheduledTime}</span>
+                          <span className="text-[10px] text-emerald-200 font-mono">{req.scheduledDateJalali || todayJalali} - {req.scheduledTime}</span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="font-mono text-xs font-bold text-sky-200" dir="ltr">{req.contactPhone}</span>
+                          <span className="font-mono text-xs font-bold text-emerald-100" dir="ltr">{req.contactPhone}</span>
                           <span className="font-mono text-[10px] bg-white/10 px-1.5 py-0.5 rounded text-white/90">{req.ticketNo}</span>
                         </div>
                         <div className="flex items-center gap-1.5 pt-1 border-t border-white/10">
@@ -606,11 +740,40 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
                 </div>
               )}
 
+              {/* 2. Field Technician Dispatches Alert Banner */}
+              {pendingFieldDispatches.length > 0 && (
+                <div className="p-4 rounded-3xl bg-gradient-to-r from-blue-800 via-indigo-800 to-slate-900 text-white shadow-lg space-y-3 border border-blue-600/30">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-2xl bg-white/20 flex items-center justify-center">
+                        <Truck className="w-4 h-4 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-sm">
+                          {toPersianDigits(pendingFieldDispatches.length)} مأموریت اعزام تکنسین جدید
+                        </h3>
+                        <p className="text-[11px] text-blue-100">
+                          درخواست‌های نمونه‌برداری کارگاهی نیازمند تخصیص تکنسین و صدور شیت پذیرش
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleTabChange('requests')}
+                      className="px-3.5 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white font-bold text-xs flex items-center gap-1.5 transition self-start sm:self-auto cursor-pointer"
+                    >
+                      <Truck className="w-3.5 h-3.5" />
+                      <span>مشاهده مأموریت‌ها ({toPersianDigits(fieldDispatches.length)})</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* 4 Action Cards at Top */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <button 
-                  onClick={() => setActiveTab('new_test')} 
-                  className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex items-center gap-3.5 hover:border-blue-500 hover:shadow-md transition group text-start relative overflow-hidden"
+                  onClick={() => handleTabChange('new_test')} 
+                  className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex items-center gap-3.5 hover:border-blue-500 hover:shadow-md transition group text-start relative overflow-hidden cursor-pointer"
                 >
                   <div className="w-11 h-11 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 shrink-0 group-hover:scale-105 transition">
                     <FlaskConical className="w-5 h-5" />
@@ -623,8 +786,8 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
                 </button>
 
                 <button 
-                  onClick={() => setActiveTab('samples')} 
-                  className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex items-center gap-3.5 hover:border-amber-500 hover:shadow-md transition group text-start relative overflow-hidden"
+                  onClick={() => handleTabChange('samples')} 
+                  className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex items-center gap-3.5 hover:border-amber-500 hover:shadow-md transition group text-start relative overflow-hidden cursor-pointer"
                 >
                   <div className="w-11 h-11 rounded-xl bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 shrink-0 group-hover:scale-105 transition">
                     <Boxes className="w-5 h-5" />
@@ -637,8 +800,8 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
                 </button>
 
                 <button 
-                  onClick={() => setActiveTab('tests')} 
-                  className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex items-center gap-3.5 hover:border-indigo-500 hover:shadow-md transition group text-start relative overflow-hidden"
+                  onClick={() => handleTabChange('tests')} 
+                  className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex items-center gap-3.5 hover:border-indigo-500 hover:shadow-md transition group text-start relative overflow-hidden cursor-pointer"
                 >
                   <div className="w-11 h-11 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 shrink-0 group-hover:scale-105 transition">
                     <ClipboardList className="w-5 h-5" />
@@ -651,8 +814,8 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
                 </button>
 
                 <button 
-                  onClick={() => setActiveTab('reports')} 
-                  className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex items-center gap-3.5 hover:border-emerald-500 hover:shadow-md transition group text-start relative overflow-hidden"
+                  onClick={() => handleTabChange('reports')} 
+                  className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex items-center gap-3.5 hover:border-emerald-500 hover:shadow-md transition group text-start relative overflow-hidden cursor-pointer"
                 >
                   <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 shrink-0 group-hover:scale-105 transition">
                     <FileText className="w-5 h-5" />
@@ -738,8 +901,8 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
                   </div>
 
                   <button
-                    onClick={() => setActiveTab('tests')}
-                    className="w-full mt-3 text-center text-xs text-blue-600 font-bold hover:underline py-1"
+                    onClick={() => handleTabChange('tests')}
+                    className="w-full mt-3 text-center text-xs text-blue-600 font-bold hover:underline py-1 cursor-pointer"
                   >
                     مشاهده لیست کامل تمام آزمایش‌ها ({toPersianDigits(reports.length)})
                   </button>
@@ -928,10 +1091,10 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
               customers={customers} 
               onSubmit={() => {
                 refreshData();
-                setActiveTab('tests');
+                handleTabChange('tests');
               }} 
               onCancel={() => {
-                setActiveTab('dashboard');
+                handleTabChange('dashboard');
               }} 
               onCustomerRegistered={refreshData}
             />

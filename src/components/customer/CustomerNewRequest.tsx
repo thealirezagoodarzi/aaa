@@ -58,6 +58,7 @@ export const CustomerNewRequest: React.FC<CustomerNewRequestProps> = ({
       scheduledDateJalali: formData.scheduledDate,
       scheduledTime: formData.scheduledTime,
       serviceType: `نمونه‌گیری بتن تازه رده ${formData.concreteGrade} - حجم تقریبی ${formData.volumeM3} مترمکعب`,
+      requestCategory: 'field_dispatch',
       status: 'requested',
       notes: `${formData.sampleLocation} • ${formData.notes || 'درخواست اعزام نمونه‌گیر به کارگاه'}`
     });

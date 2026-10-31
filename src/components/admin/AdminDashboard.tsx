@@ -38,6 +38,7 @@ import { PhotoGalleryViewer } from '../common/PhotoGalleryViewer';
 import { CompanyLogo } from '../common/CompanyLogo';
 import { downloadBlob, printOnlyElement } from '../../utils/printDom';
 import { LAB_IMAGES } from '../../assets/images';
+import { navHistory } from '../../services/navigationHistory';
 // BUG FIX (ID collision): see src/utils/uniqueId.ts — was `TX-${Date.now().toString().slice(-6)}`
 import { uniqueId, uniqueRefNo } from '../../utils/uniqueId';
 import {
@@ -126,7 +127,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const t = translations[language];
   const [showAdminUserMenu, setShowAdminUserMenu] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'approvals' | 'reports' | 'accounting' | 'ai_suite' | 'calibrations' | 'dispatches' | 'env_logs' | 'gallery' | 'sms' | 'forms' | 'customers' | 'users'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'approvals' | 'reports' | 'accounting' | 'ai_suite' | 'calibrations' | 'dispatches' | 'env_logs' | 'gallery' | 'sms' | 'forms' | 'customers' | 'users'>(() => {
+    const curTab = navHistory.getCurrentTab();
+    if (curTab && ['overview', 'approvals', 'reports', 'accounting', 'ai_suite', 'calibrations', 'dispatches', 'env_logs', 'gallery', 'sms', 'forms', 'customers', 'users'].includes(curTab)) {
+      return curTab as any;
+    }
+    return 'overview';
+  });
+
+  const handleAdminTabChange = (newTab: typeof activeTab) => {
+    setActiveTab(newTab);
+    setMobileMenuOpen(false);
+    if (newTab !== 'overview') {
+      navHistory.navigateTab(newTab);
+    } else {
+      navHistory.navigateTab('overview');
+    }
+  };
+
+  React.useEffect(() => {
+    const unsubNav = navHistory.subscribeView((view, meta) => {
+      if (view === 'portal') {
+        const targetTab = meta?.tab as typeof activeTab | undefined;
+        if (targetTab && ['overview', 'approvals', 'reports', 'accounting', 'ai_suite', 'calibrations', 'dispatches', 'env_logs', 'gallery', 'sms', 'forms', 'customers', 'users'].includes(targetTab)) {
+          setActiveTab(targetTab);
+        } else {
+          setActiveTab('overview');
+        }
+      }
+    });
+    return () => unsubNav();
+  }, []);
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [overviewPeriod, setOverviewPeriod] = useState<'week' | 'month' | 'year'>('month');

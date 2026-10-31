@@ -40,16 +40,23 @@ class NavigationHistoryService {
     // Detect initial view from hash if present
     const initialHash = window.location.hash.replace('#', '');
     let initialView: AppView = 'landing';
+    let initialTab: string | undefined = undefined;
     if (initialHash === 'login') initialView = 'login';
     else if (initialHash === 'test-request') initialView = 'test-request';
-    else if (initialHash.startsWith('portal')) initialView = 'portal';
+    else if (initialHash.startsWith('portal')) {
+      initialView = 'portal';
+      const parts = initialHash.split('/');
+      if (parts.length > 1 && parts[1]) {
+        initialTab = parts[1];
+      }
+    }
 
     this.currentView = initialView;
-    this.viewHistory = [{ view: initialView }];
+    this.viewHistory = [{ view: initialView, tab: initialTab }];
 
     // Replace current state with root entry
     window.history.replaceState(
-      { appNav: true, view: initialView, depth: 0, isRoot: true },
+      { appNav: true, view: initialView, tab: initialTab, depth: 0, isRoot: true },
       '',
       window.location.hash || (initialView === 'landing' ? '#home' : `#${initialView}`)
     );
@@ -349,6 +356,11 @@ class NavigationHistoryService {
 
   public getCurrentView(): AppView {
     return this.currentView;
+  }
+
+  public getCurrentTab(): string | undefined {
+    const last = this.viewHistory[this.viewHistory.length - 1];
+    return last?.tab;
   }
 }
 

@@ -5,6 +5,8 @@
  * are cleanly output without canvas-slicing clipping, DOM pollution, or thread freeze.
  */
 
+import { downloadBlob } from './printDom';
+
 export type PdfGenerationResult = 'SUCCESS' | 'ELEMENT_NOT_FOUND' | 'TIMEOUT' | 'ERROR' | 'BUSY';
 
 export interface PdfExportResponse {
@@ -79,15 +81,44 @@ export async function downloadContractPdf(
         scale: 1.5,
         useCORS: true,
         logging: false,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#ffffff',
+        onclone: (clonedDoc: Document) => {
+          // Sanitize modern Tailwind v4 oklch colors so html2canvas color parser does not throw
+          try {
+            const styles = clonedDoc.querySelectorAll('style');
+            styles.forEach(st => {
+              if (st.textContent && st.textContent.includes('oklch')) {
+                st.textContent = st.textContent.replace(/oklch\([^)]+\)/g, '#1e293b');
+              }
+            });
+            const pages = clonedDoc.querySelectorAll<HTMLElement>('.contract-page, .certificate-page');
+            pages.forEach(p => {
+              p.style.backgroundColor = '#ffffff';
+              p.style.color = '#0f172a';
+              p.style.boxShadow = 'none';
+            });
+          } catch (e) {
+            console.warn('[PDF] Stylesheet sanitization warning:', e);
+          }
+        }
       });
 
       const imgData = canvas.toDataURL('image/jpeg', 0.92);
       pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
     }
 
-    // 4. Trigger download
-    pdf.save(finalFilename);
+    // 4. Trigger download via Blob (reliable across mobile & desktop browsers)
+    try {
+      const pdfBlob = pdf.output('blob');
+      if (pdfBlob && pdfBlob.size > 0) {
+        downloadBlob(pdfBlob, finalFilename);
+      } else {
+        pdf.save(finalFilename);
+      }
+    } catch (saveErr) {
+      console.warn('[PDF] Blob output failed, falling back to pdf.save():', saveErr);
+      pdf.save(finalFilename);
+    }
 
     return {
       status: 'SUCCESS',
