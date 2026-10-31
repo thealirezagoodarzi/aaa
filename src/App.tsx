@@ -7,7 +7,6 @@ import { LandingPage } from './components/landing/LandingPage';
 import { ForcePasswordChangeModal } from './components/auth/ForcePasswordChangeModal';
 import { CompanyLogo } from './components/common/CompanyLogo';
 import { navHistory, AppView } from './services/navigationHistory';
-import { useModalBack } from './hooks/useModalBack';
 import { Building2, Phone, Instagram, Linkedin, Send, Globe, ArrowRight, ArrowLeft } from 'lucide-react';
 
 // PERF: heavy role-based views are code-split into lazily-loaded chunks so the
@@ -54,7 +53,6 @@ export function App() {
 
   // SQL Schema Modal State
   const [isSqlModalOpen, setIsSqlModalOpen] = useState(false);
-  useModalBack(isSqlModalOpen, () => setIsSqlModalOpen(false), 'app-sql-schema-modal');
 
   // Gentle root exit guard toast message
   const [appToast, setAppToast] = useState<string | null>(null);

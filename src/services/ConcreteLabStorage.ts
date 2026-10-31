@@ -2086,6 +2086,32 @@ export class ConcreteLabStorage {
     return newDisp;
   }
 
+  // Public contact forms must not claim success until the server accepts them.
+  public async addCallbackRequest(dispatch: Omit<TechnicianDispatch, 'id' | 'ticketNo' | 'createdAt'>): Promise<TechnicianDispatch> {
+    const request: TechnicianDispatch = {
+      ...dispatch,
+      source: 'website_callback',
+      id: uniqueId('dsp'),
+      ticketNo: uniqueRefNo('CALL'),
+      createdAt: new Date().toISOString(),
+    };
+    const ok = await this.pushServer('add-dispatch', { dispatch: request });
+    if (!ok) throw new Error('ثبت درخواست ناموفق بود. لطفاً دوباره تلاش کنید.');
+    this.state.dispatches = [request, ...this.state.dispatches.filter(d => d.id !== request.id)];
+    this.notify();
+    return request;
+  }
+
+  public async completeCallbackRequest(id: string): Promise<boolean> {
+    const ok = await this.pushServer('update-dispatch-status', { id, status: 'completed' });
+    if (ok) {
+      const request = this.state.dispatches.find(d => d.id === id || d.ticketNo === id);
+      if (request) request.status = 'completed';
+      this.notify();
+    }
+    return ok;
+  }
+
   public updateDispatchStatus(id: string, status: TechnicianDispatch['status'], technicianName?: string): TechnicianDispatch | null {
     const idx = this.state.dispatches.findIndex(d => d.id === id || d.ticketNo === id);
     if (idx !== -1) {

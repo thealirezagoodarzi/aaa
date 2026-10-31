@@ -44,7 +44,6 @@ export const PrintCertificate: React.FC<PrintCertificateProps> = ({
   const [showStandardSheet, setShowStandardSheet] = useState(false);
 
   useModalBack(true, onClose, 'print-certificate-modal');
-  useModalBack(showStandardSheet, () => setShowStandardSheet(false), 'print-cert-child-sheet');
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

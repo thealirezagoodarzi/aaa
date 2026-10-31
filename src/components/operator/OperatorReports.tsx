@@ -1,3 +1,4 @@
+import { useModalBack } from '../../hooks/useModalBack';
 import React, { useState } from 'react';
 import { labDb } from '../../services/supabase';
 import { getTodayJalali, formatJalali, toPersianDigits } from '../../utils/jalali';
@@ -9,6 +10,7 @@ export const OperatorReports: React.FC = () => {
   const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [showStandardExcelModal, setShowStandardExcelModal] = useState(false);
+  useModalBack(showPrintModal, () => setShowPrintModal(false), 'operator-daily-print');
   const reports = labDb.getReports();
   const todayJalali = formatJalali(getTodayJalali());
 

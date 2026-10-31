@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useModalBack } from '../../hooks/useModalBack';
 import { Customer } from '../../types';
 import { 
   Printer, 
@@ -66,6 +67,8 @@ export const PrintContractModal: React.FC<PrintContractModalProps> = ({
   const [labPhone, setLabPhone] = useState(LAB_INFO.phoneRaw || '09131703177');
 
   const [showEditor, setShowEditor] = useState(false);
+
+  useModalBack(Boolean(customer), onClose, 'print-contract-modal');
 
   if (!customer) return null;
 

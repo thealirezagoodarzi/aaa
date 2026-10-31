@@ -1,3 +1,5 @@
+import { useModalBack } from '../../hooks/useModalBack';
+import { isCallbackRequest } from '../../utils/dispatchKind';
 import React, { useState, useEffect } from 'react';
 import { TechnicianDispatch, Customer, UserProfile } from '../../types';
 import { labDb } from '../../services/supabase';
@@ -31,7 +33,7 @@ interface OperatorRequestsTabProps {
 export const OperatorRequestsTab: React.FC<OperatorRequestsTabProps> = ({
   currentUser
 }) => {
-  const [dispatches, setDispatches] = useState<TechnicianDispatch[]>(() => labDb.getDispatches());
+  const [dispatches, setDispatches] = useState<TechnicianDispatch[]>(() => labDb.getDispatches().filter(d => !isCallbackRequest(d)));
   const [customers, setCustomers] = useState<Customer[]>(() => labDb.getCustomers());
   const [filterStatus, setFilterStatus] = useState<'all' | 'requested' | 'assigned' | 'completed'>('all');
   const [search, setSearch] = useState('');
@@ -42,12 +44,14 @@ export const OperatorRequestsTab: React.FC<OperatorRequestsTabProps> = ({
   
   // Print preview modal
   const [printingItem, setPrintingItem] = useState<TechnicianDispatch | null>(null);
+  useModalBack(Boolean(assigningItem), () => setAssigningItem(null), 'operator-request-assign');
+  useModalBack(Boolean(printingItem), () => setPrintingItem(null), 'operator-request-print');
 
   // Success message toast
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const refreshData = () => {
-    setDispatches(labDb.getDispatches());
+    setDispatches(labDb.getDispatches().filter(d => !isCallbackRequest(d)));
     setCustomers(labDb.getCustomers());
   };
 

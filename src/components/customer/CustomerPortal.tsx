@@ -1,3 +1,4 @@
+import { usePortalTab } from '../../hooks/usePortalTab';
 import React, { useState, useMemo } from 'react';
 import { 
   UserProfile, 
@@ -58,6 +59,8 @@ export interface CustomerPortalProps {
   onToggleDarkMode: () => void;
 }
 
+const PORTAL_TABS = ['dashboard', 'reports', 'new-request', 'invoices', 'contracts', 'profile'] as const;
+
 export const CustomerPortal: React.FC<CustomerPortalProps> = ({
   currentUser,
   language,
@@ -66,7 +69,7 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
   isDarkMode,
   onToggleDarkMode
 }) => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'new-request' | 'invoices' | 'contracts' | 'profile'>('dashboard');
+  const [activeTab, setActiveTab] = usePortalTab('dashboard', PORTAL_TABS);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterGrade, setFilterGrade] = useState('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'passed' | 'pending'>('all');

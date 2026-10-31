@@ -43,7 +43,7 @@ export const TestRequestWizardModal: React.FC<TestRequestWizardModalProps> = ({
       .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setContactError(null);
     const cleanName = fullName.trim();
@@ -62,8 +62,8 @@ export const TestRequestWizardModal: React.FC<TestRequestWizardModalProps> = ({
       const todayJalali = formatJalali(getTodayJalali());
       const nowTime = new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
 
-      // 1. Dispatch record sent to operator in labDb
-      const newDispatch = labDb.addDispatch({
+      // Save the callback request before displaying a tracking code
+      const newDispatch = await labDb.addCallbackRequest({
         customerId: uniqueId('lead'),
         customerName: cleanName,
         projectName: 'درخواست آنلاین آزمایشگاه',
@@ -71,23 +71,15 @@ export const TestRequestWizardModal: React.FC<TestRequestWizardModalProps> = ({
         contactPhone: cleanPhone,
         scheduledDateJalali: todayJalali,
         scheduledTime: nowTime,
-        serviceType: 'درخواست مشاوره و اعزام تکنسین آزمایشگاه',
+        serviceType: 'درخواست تماس و مشاوره',
         status: 'requested',
         notes: `درخواست ثبت‌شده از وب‌سایت • متقاضی: ${cleanName} • شماره تماس: ${cleanPhone} • ساعت: ${nowTime}`
-      });
-
-      // 2. Notification SMS
-      labDb.sendSms({
-        recipientPhone: cleanPhone,
-        recipientName: cleanName,
-        customerName: cleanName,
-        event: 'dispatch_scheduled',
-        customMessage: `درخواست مشاوره شما ثبت شد (کد پیگیری: ${newDispatch.ticketNo}). کارشناسان آزما بتن پایش خاک و پی جهان بین به زودی با شما تماس خواهند گرفت.`
       });
 
       setSubmittedTicket(newDispatch.ticketNo);
     } catch (err) {
       console.error(err);
+      setContactError(isFa ? 'ثبت درخواست ناموفق بود. لطفاً دوباره تلاش کنید.' : 'Could not submit your request. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
