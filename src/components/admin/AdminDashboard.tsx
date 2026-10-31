@@ -1,3 +1,4 @@
+import { usePortalTab } from '../../hooks/usePortalTab';
 import React, { useState } from 'react';
 import { 
   UserProfile, 
@@ -114,6 +115,8 @@ interface AdminDashboardProps {
   onToggleDarkMode?: () => void;
 }
 
+const PORTAL_TABS = ['overview', 'approvals', 'reports', 'accounting', 'ai_suite', 'calibrations', 'dispatches', 'env_logs', 'gallery', 'sms', 'forms', 'customers', 'users'] as const;
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
   currentUser, 
   language, 
@@ -126,7 +129,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const t = translations[language];
   const [showAdminUserMenu, setShowAdminUserMenu] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'approvals' | 'reports' | 'accounting' | 'ai_suite' | 'calibrations' | 'dispatches' | 'env_logs' | 'gallery' | 'sms' | 'forms' | 'customers' | 'users'>('overview');
+  const [activeTab, setActiveTab] = usePortalTab('overview', PORTAL_TABS);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [overviewPeriod, setOverviewPeriod] = useState<'week' | 'month' | 'year'>('month');

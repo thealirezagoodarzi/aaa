@@ -1,3 +1,6 @@
+import { isCallbackRequest } from '../../utils/dispatchKind';
+import { OperatorCallbacksTab } from './OperatorCallbacksTab';
+import { usePortalTab } from '../../hooks/usePortalTab';
 import React, { useState, useEffect } from 'react';
 import { 
   UserProfile, 
@@ -70,6 +73,8 @@ interface OperatorDashboardProps {
   onToggleDarkMode?: () => void;
 }
 
+const PORTAL_TABS = ['dashboard', 'requests', 'callbacks', 'new_test', 'samples', 'tests', 'customers', 'reports', 'gallery', 'settings'] as const;
+
 export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
   currentUser,
   language,
@@ -81,7 +86,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
   onToggleDarkMode
 }) => {
   const t = translations[language];
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'requests' | 'new_test' | 'samples' | 'tests' | 'customers' | 'reports' | 'gallery' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = usePortalTab('dashboard', PORTAL_TABS);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -96,7 +101,6 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
 
   // Hook dialogs to browser Back button (activeTab is a view tab, NOT a modal)
   useModalBack(Boolean(selectedForEntry), () => setSelectedForEntry(null), 'operator-modal-entry');
-  useModalBack(Boolean(selectedForPreview), () => setSelectedForPreview(null), 'operator-modal-preview');
   useModalBack(mobileMenuOpen, () => setMobileMenuOpen(false), 'operator-modal-mobile-menu');
   useModalBack(showNotifications, () => setShowNotifications(false), 'operator-modal-notifications');
 
@@ -120,7 +124,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
   }, []);
 
   // Web test requests from landing page awaiting operator contact
-  const webRequests = dispatches.filter(d => d.status === 'requested');
+  const webRequests = dispatches.filter(d => isCallbackRequest(d) && d.status === 'requested');
 
   const todayJalali = formatJalali(getTodayJalali());
 
@@ -264,19 +268,14 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
             <span>پیشخوان و آمار سریع</span>
           </button>
 
-          <button 
-            onClick={() => { setActiveTab('requests'); setMobileMenuOpen(false); }}
-            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition ${activeTab === 'requests' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'}`}
-          >
-            <div className="flex items-center gap-3">
-              <Truck className="w-4 h-4 shrink-0" />
-              <span>درخواست‌های اعزام و آنلاین</span>
-            </div>
-            {webRequests.length > 0 && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold bg-rose-500 text-white animate-pulse">
-                {toPersianDigits(webRequests.length)}
-              </span>
-            )}
+          <button onClick={() => { setActiveTab('callbacks'); setMobileMenuOpen(false); }}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition ${activeTab === 'callbacks' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800/60'}`}>
+            <span className="flex items-center gap-3"><Phone className="w-4 h-4" /> درخواست‌های تماس وب‌سایت</span>
+            {webRequests.length > 0 && <span className="rounded-full bg-rose-500 px-1.5 text-white">{toPersianDigits(webRequests.length)}</span>}
+          </button>
+          <button onClick={() => { setActiveTab('requests'); setMobileMenuOpen(false); }}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition ${activeTab === 'requests' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800/60'}`}>
+            <Truck className="w-4 h-4" /> درخواست‌های اعزام
           </button>
 
           <button 
@@ -417,11 +416,11 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
             {/* Quick Action Buttons */}
             {webRequests.length > 0 && (
               <button
-                onClick={() => setActiveTab('requests')}
+                onClick={() => setActiveTab('callbacks')}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold shadow-xs transition animate-pulse cursor-pointer"
               >
                 <Truck className="w-3.5 h-3.5" />
-                <span>{toPersianDigits(webRequests.length)} درخواست آنلاین جدید</span>
+                <span>{toPersianDigits(webRequests.length)} درخواست تماس جدید</span>
               </button>
             )}
 
@@ -468,6 +467,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
                     </span>
                   </div>
                   <div className="space-y-2.5 max-h-72 overflow-y-auto">
+                    {dueBreakSamples.length > 0 && <h3 className="font-bold text-amber-700">موعد آزمون نمونه‌ها</h3>}
                     {/* Due break notifications */}
                     {dueBreakSamples.slice(0, 3).map(s => (
                       <div 
@@ -491,6 +491,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
                       </div>
                     ))}
 
+                    {webRequests.length > 0 && <h3 className="font-bold text-blue-700">درخواست‌های تماس وب‌سایت</h3>}
                     {/* Web requests */}
                     {webRequests.map(req => (
                       <div key={req.id} className="p-3 rounded-xl bg-blue-50/90 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-900/60 space-y-2">
@@ -516,12 +517,12 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
                         </div>
                         <button
                           onClick={() => {
-                            labDb.updateDispatchStatus(req.id, 'assigned', currentUser.fullName);
-                            refreshData();
+                            setShowNotifications(false);
+                            setActiveTab('callbacks');
                           }}
                           className="w-full text-center py-1 rounded-lg bg-slate-200/80 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-[10px] font-bold text-slate-700 dark:text-slate-300 transition"
                         >
-                          علامت‌گذاری به عنوان تماس گرفته شده
+                          مشاهده و پیگیری درخواست تماس
                         </button>
                       </div>
                     ))}
@@ -552,20 +553,20 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
                       </div>
                       <div>
                         <h3 className="font-bold text-sm">
-                          {toPersianDigits(webRequests.length)} درخواست آزمایش جدید از وب‌سایت
+                          {toPersianDigits(webRequests.length)} درخواست تماس جدید از وب‌سایت
                         </h3>
                         <p className="text-[11px] text-blue-100">
-                          اطلاعات متقاضیان جهت تماس تلفنی، هماهنگی اعزام تکنسین و صدور شیت
+                          اطلاعات متقاضیان جهت تماس تلفنی؛ مستقل از درخواست‌های اعزام
                         </p>
                       </div>
                     </div>
 
                     <button
-                      onClick={() => setActiveTab('requests')}
+                      onClick={() => setActiveTab('callbacks')}
                       className="px-3 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white font-bold text-xs flex items-center gap-1.5 transition self-start sm:self-auto cursor-pointer"
                     >
                       <Truck className="w-3.5 h-3.5" />
-                      <span>مدیریت کامل درخواست‌ها ({toPersianDigits(dispatches.length)})</span>
+                      <span>مدیریت درخواست‌های تماس ({toPersianDigits(webRequests.length)})</span>
                     </button>
                   </div>
 
@@ -590,14 +591,13 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
                           </a>
                           <button
                             onClick={() => {
-                              labDb.updateDispatchStatus(req.id, 'assigned', currentUser.fullName);
-                              refreshData();
+                              setActiveTab('callbacks');
                             }}
                             className="flex-1 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white font-bold text-[10px] flex items-center justify-center gap-1 transition cursor-pointer"
-                            title="ثبت تماس گرفته شد"
+                            title="مشاهده و پیگیری درخواست تماس"
                           >
                             <CheckCircle2 className="w-3 h-3" />
-                            <span>پیگیری شد</span>
+                            <span>پیگیری درخواست</span>
                           </button>
                         </div>
                       </div>
@@ -918,6 +918,8 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
 
             </div>
           )}
+
+          {activeTab === 'callbacks' && <OperatorCallbacksTab dispatches={dispatches} />}
 
           {activeTab === 'requests' && (
             <OperatorRequestsTab currentUser={currentUser} />

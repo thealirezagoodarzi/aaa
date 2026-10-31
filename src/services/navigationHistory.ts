@@ -23,8 +23,6 @@ class NavigationHistoryService {
   private currentView: AppView = 'landing';
   private viewHistory: { view: AppView; tab?: string }[] = [{ view: 'landing' }];
   
-  // Monotonic counter for silent pops (replaces unreliable 80ms timer boolean)
-  private pendingSilentPops: number = 0;
   private initialized: boolean = false;
 
   constructor() {
@@ -65,11 +63,6 @@ class NavigationHistoryService {
   }
 
   private handlePopState = (event: PopStateEvent) => {
-    if (this.pendingSilentPops > 0) {
-      this.pendingSilentPops--;
-      return;
-    }
-
     // 1. If any modal is open, close the topmost modal first!
     if (this.modalStack.length > 0) {
       const topModal = this.modalStack.pop();
@@ -218,13 +211,12 @@ class NavigationHistoryService {
   public goBack() {
     // 1. If any modal is open, close it
     if (this.modalStack.length > 0) {
-      const modal = this.modalStack.pop();
-      if (modal) {
-        if (modal.pushedHistory && !modal.consumed) {
-          modal.consumed = true;
-          this.pendingSilentPops++;
-          window.history.back();
-        }
+      const modal = this.modalStack[this.modalStack.length - 1];
+      if (window.history.state?.modalId === modal.id) {
+        window.history.back();
+      } else {
+        this.modalStack.pop();
+        modal.consumed = true;
         modal.onClose();
       }
       return;
@@ -244,18 +236,9 @@ class NavigationHistoryService {
         return;
       }
 
-      this.viewHistory.pop();
-      if (previous) {
-        this.currentView = previous.view;
-        this.notifyViewSubscribers(previous.view, { tab: previous.tab, fromPop: true });
-        const hash = previous.view === 'landing' ? '#home' : `#${previous.view}${previous.tab ? `/${previous.tab}` : ''}`;
-        window.history.replaceState(
-          { appNav: true, view: previous.view, tab: previous.tab, depth: this.viewHistory.length },
-          '',
-          hash
-        );
-        return;
-      }
+      // Let popstate update both the logical stack and the browser position.
+      window.history.back();
+      return;
     }
 
     // 3. Fallback:
@@ -310,11 +293,11 @@ class NavigationHistoryService {
     const idx = this.modalStack.findIndex(m => m.id === id);
     if (idx !== -1) {
       const [removed] = this.modalStack.splice(idx, 1);
-      if (removed && removed.pushedHistory && !removed.consumed) {
-        // Pop the state that was pushed for this modal quietly
-        removed.consumed = true;
-        this.pendingSilentPops++;
-        window.history.back();
+      if (removed && removed.pushedHistory && !removed.consumed && window.history.state?.modalId === id) {
+        // Never issue an asynchronous back during React cleanup: StrictMode can
+        // immediately re-register the modal before popstate arrives, causing a
+        // silent pop to consume an unrelated entry and eventually leave the app.
+        window.history.replaceState({ appNav: true, view: this.currentView, closedModal: true }, '', window.location.hash);
       }
     }
   }

@@ -1,3 +1,4 @@
+import { useModalBack } from '../../hooks/useModalBack';
 import React, { useState } from 'react';
 import { Customer } from '../../types';
 import { toPersianDigits } from '../../utils/jalali';
@@ -23,6 +24,7 @@ interface OperatorCustomersListProps {
 export const OperatorCustomersList: React.FC<OperatorCustomersListProps> = ({ customers }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  useModalBack(Boolean(selectedCustomer), () => setSelectedCustomer(null), 'operator-customer-details');
 
   const filteredCustomers = customers.filter(c => {
     const q = searchQuery.toLowerCase().trim();

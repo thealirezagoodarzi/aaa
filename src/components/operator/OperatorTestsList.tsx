@@ -1,3 +1,4 @@
+import { useModalBack } from '../../hooks/useModalBack';
 import React, { useState } from 'react';
 import { TestReport, Customer } from '../../types';
 import { Search, Filter, Eye, PenTool, CheckCircle2, AlertTriangle, Clock, RefreshCw, FileSpreadsheet } from 'lucide-react';
@@ -25,6 +26,7 @@ export const OperatorTestsList: React.FC<OperatorTestsListProps> = ({
   const [selectedForEntry, setSelectedForEntry] = useState<TestReport | null>(null);
   const [selectedForPreview, setSelectedForPreview] = useState<TestReport | null>(null);
   const [selectedForStandardSheet, setSelectedForStandardSheet] = useState<TestReport | null>(null);
+  useModalBack(Boolean(selectedForEntry), () => setSelectedForEntry(null), 'operator-tests-result');
 
   const filteredReports = reports.filter(r => {
     const reportCode = (r.reportNo || r.id).toLowerCase();

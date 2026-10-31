@@ -52,7 +52,7 @@ export async function downloadContractPdf(
 
     // 2. Load html2canvas and jsPDF dynamically
     const [html2canvasModule, jspdfModule] = await Promise.all([
-      import('html2canvas'),
+      import('html2canvas-pro'),
       import('jspdf')
     ]);
     const html2canvas: any = (html2canvasModule as any).default || html2canvasModule;
@@ -79,11 +79,22 @@ export async function downloadContractPdf(
         scale: 1.5,
         useCORS: true,
         logging: false,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#ffffff',
+        windowWidth: 1200,
+        onclone: (_document: Document, clonedElement: HTMLElement) => {
+          clonedElement.style.width = '210mm';
+          clonedElement.style.maxWidth = 'none';
+          clonedElement.style.margin = '0';
+        }
       });
 
       const imgData = canvas.toDataURL('image/jpeg', 0.92);
-      pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+      // Keep the page's proportions; shrink an unusually long page rather
+      // than stretching or clipping its contents.
+      const factor = Math.min(210 / canvas.width, 297 / canvas.height);
+      const width = canvas.width * factor;
+      const height = canvas.height * factor;
+      pdf.addImage(imgData, 'JPEG', (210 - width) / 2, 0, width, height, undefined, 'FAST');
     }
 
     // 4. Trigger download

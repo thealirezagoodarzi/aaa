@@ -1,3 +1,4 @@
+import { isCallbackRequest } from '../../utils/dispatchKind';
 import React, { useState, useEffect } from 'react';
 import { TechnicianDispatch, Customer, FieldTechnician } from '../../types';
 import { labDb } from '../../services/supabase';
@@ -22,7 +23,7 @@ import {
 } from 'lucide-react';
 
 export const DispatchesManagementTab: React.FC = () => {
-  const [dispatches, setDispatches] = useState<TechnicianDispatch[]>(() => labDb.getDispatches());
+  const [dispatches, setDispatches] = useState<TechnicianDispatch[]>(() => labDb.getDispatches().filter(d => !isCallbackRequest(d)));
   const [customers, setCustomers] = useState<Customer[]>(() => labDb.getCustomers());
   const [technicians, setTechnicians] = useState<FieldTechnician[]>(() => labDb.getTechnicians());
   const [showTechsModal, setShowTechsModal] = useState(false);
@@ -52,7 +53,7 @@ export const DispatchesManagementTab: React.FC = () => {
 
   useEffect(() => {
     const unsub = labDb.subscribe(() => {
-      setDispatches(labDb.getDispatches());
+      setDispatches(labDb.getDispatches().filter(d => !isCallbackRequest(d)));
       setCustomers(labDb.getCustomers());
       setTechnicians(labDb.getTechnicians());
     });
@@ -77,7 +78,7 @@ export const DispatchesManagementTab: React.FC = () => {
   const handleDelete = (id: string, ticketNo: string) => {
     if (confirm(`آیا از لغو و حذف برگه اعزام شماره ${ticketNo} اطمینان دارید؟`)) {
       labDb.deleteDispatch(id);
-      setDispatches(labDb.getDispatches());
+      setDispatches(labDb.getDispatches().filter(d => !isCallbackRequest(d)));
       setSuccessMsg(`برگه اعزام ${ticketNo} با موفقیت حذف گردید.`);
       setTimeout(() => setSuccessMsg(null), 3500);
     }

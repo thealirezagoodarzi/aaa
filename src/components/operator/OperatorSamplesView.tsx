@@ -1,3 +1,4 @@
+import { useModalBack } from '../../hooks/useModalBack';
 import React, { useState } from 'react';
 import { TestReport, Customer, UserProfile } from '../../types';
 import { 
@@ -53,6 +54,8 @@ export const OperatorSamplesView: React.FC<OperatorSamplesViewProps> = ({
   const [selectedForEntry, setSelectedForEntry] = useState<TestReport | null>(null);
   const [selectedForPreview, setSelectedForPreview] = useState<TestReport | null>(null);
   const [specimenLabelModal, setSpecimenLabelModal] = useState<TestReport | null>(null);
+  useModalBack(Boolean(selectedForEntry), () => setSelectedForEntry(null), 'operator-samples-result');
+  useModalBack(Boolean(specimenLabelModal), () => setSpecimenLabelModal(null), 'operator-sample-label');
 
   // Helper: calculate days elapsed between sample date and today
   const calculateAgeDays = (sampleDateStr: string): number => {

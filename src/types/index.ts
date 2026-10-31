@@ -257,6 +257,7 @@ export interface FieldTechnician {
 }
 
 export interface TechnicianDispatch {
+  source?: 'website_callback' | 'dispatch';
   id: string;
   ticketNo: string;
   customerId: string;

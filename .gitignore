@@ -8,3 +8,5 @@ data/
 !.env.example
 logs/
 *.log
+
+node_modules/

@@ -67,7 +67,7 @@ export const TestRequestPage: React.FC<TestRequestPageProps> = ({
     refreshCaptcha();
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessNotice(null);
@@ -106,8 +106,8 @@ export const TestRequestPage: React.FC<TestRequestPageProps> = ({
     try {
       const nowTime = new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
       
-      // صرفاً یک اعلان برای صفحه اپراتور در قالب رکورد دیسپچ ثبت می‌شود و هیچ‌گونه صفحه‌سازی یا اقدام دیگری صورت نمی‌گیرد
-      labDb.addDispatch({
+      // درخواست تماس جدا از اعزام‌های تکنسین پیگیری می‌شود
+      await labDb.addCallbackRequest({
         customerId: uniqueId('lead'),
         customerName: cleanName,
         projectName: 'درخواست آزمایش وب‌سایت',

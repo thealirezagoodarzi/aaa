@@ -77,6 +77,7 @@ const sampleDispatch = {
   id: 'dsp-test-01',
   ticketNo: 'DSP-1403-999',
   status: 'requested',
+  source: 'website_callback',
   customerId: 'cust-99',
   customerName: 'کارفرمای نمونه',
   contactPhone: '09123456789',
@@ -88,6 +89,7 @@ const sampleDispatch = {
 };
 
 const cleaned = labDb.validateAndNormalizeDispatchPayload(sampleDispatch);
+assert.strictEqual(cleaned.source, 'website_callback', '❌ FAIL: Callback type was unexpectedly stripped');
 assert.strictEqual(cleaned.customerId, 'cust-99', '❌ FAIL: customerId was unexpectedly stripped');
 assert.strictEqual(cleaned.scheduledDateJalali, '1403/08/15', '❌ FAIL: scheduledDateJalali was unexpectedly stripped');
 assert.strictEqual(cleaned.scheduledTime, '10:30', '❌ FAIL: scheduledTime was unexpectedly stripped');
